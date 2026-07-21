@@ -432,6 +432,7 @@ export default function App() {
 /* ---------- header + nav ---------- */
 function Header({ profile, onSave, count, onExport, onImport, user, role, members, onRefreshMembers }) {
   const [open, setOpen] = useState(false);
+  const [careOpen, setCareOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
   const fileRef = useRef();
   const [msg, setMsg] = useState("");
@@ -440,6 +441,10 @@ function Header({ profile, onSave, count, onExport, onImport, user, role, member
   const age = ageFrom(profile.dob);
   return (
     <header style={{ background: CARD, borderBottom: `1px solid ${LINE}` }} className="no-print">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 flex items-center gap-1.5">
+        <img src="/icon.png" alt="" className="w-5 h-5 rounded-md" />
+        <span className="text-xs font-semibold tracking-tight" style={{ color: SUB }}>Ausome App</span>
+      </div>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl grid place-items-center text-white text-lg font-semibold shrink-0" style={{ background: ACCENT }}>{initial}</div>
         <div className="min-w-0 flex-1">
@@ -461,16 +466,30 @@ function Header({ profile, onSave, count, onExport, onImport, user, role, member
             )}
             {role === "owner" && <button onClick={() => { onSave(draft); setOpen(false); }} className="px-4 py-2 rounded-lg text-sm text-white font-medium" style={{ background: ACCENT }}>Save</button>}
           </div>
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-4 flex flex-wrap gap-2 items-center">
-            <button onClick={onExport} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Download size={13} /> Backup data</button>
-            {role === "owner" && <button onClick={() => fileRef.current?.click()} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Upload size={13} /> Restore backup</button>}
-            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; if (!window.confirm("Restoring replaces ALL current data in this app with the backup. Continue?")) return; const n = await onImport(f); setMsg(n < 0 ? "Couldn't read that backup file." : `Restored ${n} note${n === 1 ? "" : "s"}.`); }} />
-            {msg && <span className="text-xs font-medium" style={{ color: ACCENT }}>{msg}</span>}
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-2 flex flex-wrap items-center gap-2">
             <span className="ml-auto text-[11px] inline-flex items-center gap-2" style={{ color: SUB }}>{user?.email}<button onClick={async () => { await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); location.reload(); }} className="inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}><LogOut size={12} /> Sign out</button></span>
-            <span className="text-[11px] w-full" style={{ color: SUB }}>Data is stored in your account and follows you across devices. Backups are still a good habit — the file includes notes, scans, goals, milestones, and settings.</span>
           </div>
           <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-4">
-            <CareTeam role={role} members={members} onRefreshMembers={onRefreshMembers} />
+            <div className={`grid ${role === "owner" ? "grid-cols-3" : "grid-cols-2"} gap-2`}>
+              <button onClick={onExport} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl" style={{ border: `1px solid ${LINE}`, background: CARD }}>
+                <Download size={20} style={{ color: ACCENT }} />
+                <span className="text-xs font-medium">Backup</span>
+              </button>
+              {role === "owner" && (
+                <button onClick={() => fileRef.current?.click()} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl" style={{ border: `1px solid ${LINE}`, background: CARD }}>
+                  <Upload size={20} style={{ color: ACCENT }} />
+                  <span className="text-xs font-medium">Restore</span>
+                </button>
+              )}
+              <button onClick={() => setCareOpen((o) => !o)} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl" style={{ border: `1px solid ${careOpen ? ACCENT : LINE}`, background: careOpen ? ACCENT + "0D" : CARD }}>
+                <Users size={20} style={{ color: ACCENT }} />
+                <span className="text-xs font-medium">Care team{members.length > 0 ? ` (${members.length})` : ""}</span>
+              </button>
+            </div>
+            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; if (!window.confirm("Restoring replaces ALL current data in this app with the backup. Continue?")) return; const n = await onImport(f); setMsg(n < 0 ? "Couldn't read that backup file." : `Restored ${n} note${n === 1 ? "" : "s"}.`); }} />
+            {msg && <p className="text-xs font-medium mt-2" style={{ color: ACCENT }}>{msg}</p>}
+            <p className="text-[11px] mt-2" style={{ color: SUB }}>Data is stored in your account and follows you across devices. Backups are still a good habit — the file includes notes, scans, goals, milestones, and settings.</p>
+            {careOpen && <div className="mt-3"><CareTeamPanel role={role} members={members} onRefreshMembers={onRefreshMembers} /></div>}
           </div>
         </div>
       )}
@@ -478,13 +497,12 @@ function Header({ profile, onSave, count, onExport, onImport, user, role, member
   );
 }
 
-function CareTeam({ role, members, onRefreshMembers }) {
-  const [open, setOpen] = useState(false);
+function CareTeamPanel({ role, members, onRefreshMembers }) {
   const [creating, setCreating] = useState(null);
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { if (open) onRefreshMembers(); }, [open]);
+  useEffect(() => { onRefreshMembers(); }, []);
 
   const makeInvite = async (r) => {
     setBusy(true); setCreating(r); setLink("");
@@ -498,11 +516,6 @@ function CareTeam({ role, members, onRefreshMembers }) {
 
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)} className="text-xs font-medium inline-flex items-center gap-1.5" style={{ color: ACCENT }}>
-        <Users size={13} /> Care team {members.length > 0 ? `(${members.length})` : ""}
-      </button>
-      {open && (
-        <div className="mt-2 space-y-2">
           {members.map((m, i) => (
             <div key={i} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: PAPER }}>
               <span>{m.name || m.email}</span>
@@ -528,8 +541,6 @@ function CareTeam({ role, members, onRefreshMembers }) {
               )}
             </div>
           )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1476,8 +1487,8 @@ function Login({ inviteNotice }) {
   return (
     <div style={{ background: PAPER, color: INK }} className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">
-        <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4 text-white text-xl font-semibold" style={{ background: ACCENT }}>D</div>
-        <h1 className="font-semibold tracking-tight text-2xl mb-1">Development Tracker</h1>
+        <img src="/logo.png" alt="Ausome App" className="w-20 h-20 rounded-2xl mx-auto mb-4" style={{ boxShadow: "0 6px 20px rgba(15,118,110,0.25)" }} />
+        <h1 className="font-semibold tracking-tight text-2xl mb-1">Ausome App</h1>
         <p className="text-sm mb-5" style={{ color: SUB }}>A private space for families to follow a child's therapy and developmental progress, and coordinate with their care team.</p>
         <ul className="text-left space-y-1.5 mb-6">
           {features.map((f, i) => <li key={i} className="flex gap-2 text-xs leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
