@@ -8,7 +8,7 @@ import {
   GraduationCap, TrendingUp, Loader2, Award, Target, HelpCircle, Inbox,
   ClipboardList, Camera, Type, Check, X, Flag, Share2, Copy, Printer,
   ChevronRight, ImageIcon, AlertTriangle, Baby, ExternalLink, Hexagon,
-  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send, LogOut, Pencil,
+  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send, LogOut, Pencil, Users, Eye,
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
@@ -273,13 +273,40 @@ export default function App() {
   const [evals, setEvals] = useState([]);
   const [evalSummary, setEvalSummary] = useState(null);
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
+  const [family, setFamily] = useState(null); // {id, role} once resolved
+  const [members, setMembers] = useState([]);
+  const [inviteNotice, setInviteNotice] = useState("");
   const [loaded, setLoaded] = useState(false);
 
+  const refreshMembers = async () => {
+    try { const r = await fetch("/api/family/members", { credentials: "same-origin" }); if (r.ok) setMembers((await r.json()).members || []); } catch {}
+  };
+
   useEffect(() => { (async () => {
+    let pendingInvite = null;
+    if (location.pathname.startsWith("/invite/")) {
+      pendingInvite = location.pathname.split("/invite/")[1]?.split(/[/?#]/)[0] || null;
+      history.replaceState({}, "", "/");
+    }
     try {
       const r = await fetch("/api/me", { credentials: "same-origin" });
       if (!r.ok) { setUser(null); return; }
-      setUser((await r.json()).user);
+      const me = await r.json();
+      setUser(me.user);
+      let fam = me.family;
+      if (!fam && pendingInvite) {
+        const rr = await fetch("/api/invite/redeem/" + pendingInvite, { method: "POST", credentials: "same-origin" });
+        const rj = await rr.json();
+        if (rr.ok) { fam = rj.family; setInviteNotice(rj.already ? "You already have access to this record." : `You've joined as ${rj.family.role === "owner" ? "a co-owner" : "a viewer"}.`); }
+        else setInviteNotice(rj.error || "That invite link didn't work.");
+      } else if (fam && pendingInvite) {
+        setInviteNotice("You're already signed in to a different account's record, so the invite link was skipped.");
+      }
+      if (!fam) {
+        const er = await fetch("/api/family/ensure", { method: "POST", credentials: "same-origin" });
+        fam = (await er.json()).family;
+      }
+      setFamily(fam);
     } catch { setUser(null); return; }
     await migrateLocalData();
     setNotes(await store.get("ndt:notes", []));
@@ -366,8 +393,10 @@ export default function App() {
   };
 
   const viewed = viewNote ? notes.find((n) => n.id === viewNote) : null;
+  const role = family?.role || "owner";
+  const canEdit = role === "owner";
 
-  if (user === null) return <Login />;
+  if (user === null) return <Login inviteNotice={inviteNotice} />;
   if (!loaded)
     return <div style={{ background: PAPER }} className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" style={{ color: ACCENT }} size={28} /></div>;
 
@@ -379,28 +408,29 @@ export default function App() {
         @media print{ body *{visibility:hidden} #handout,#handout *{visibility:visible} #handout{position:absolute;left:0;top:0;width:100%} .no-print{display:none!important} }
       `}</style>
 
-      <Header profile={profile} onSave={saveProfile} count={notes.length} onExport={exportAll} onImport={importAll} user={user} />
+      <Header profile={profile} onSave={saveProfile} count={notes.length} onExport={exportAll} onImport={importAll} user={user} role={role} members={members} onRefreshMembers={refreshMembers} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <Nav tab={tab} setTab={setTab} />
+        {role === "viewer" && <div className="mt-4 px-4 py-2.5 rounded-2xl text-sm flex items-center gap-2" style={{ background: ACCENT + "14", color: ACCENT }}><Eye size={15} /> Viewing {profile.name ? `${profile.name}'s` : "this"} record — read-only access.</div>}
+        <Nav tab={tab} setTab={setTab} role={role} />
         <main className="pb-36 sm:pb-24 pt-6">
-          {tab === "dashboard" && <Dashboard notes={notes} goals={goals} setTab={setTab} onSample={() => saveNotes(sampleNotes())} onOpenDiscipline={(k) => { setNoteFilter({ disc: k, dom: "all" }); setTab("log"); }} />}
+          {tab === "dashboard" && <Dashboard notes={notes} goals={goals} setTab={setTab} onSample={() => saveNotes(sampleNotes())} onOpenDiscipline={(k) => { setNoteFilter({ disc: k, dom: "all" }); setTab("log"); }} canEdit={canEdit} />}
           {tab === "log" && <NotesLog notes={notes} goals={goals} setTab={setTab} filter={noteFilter} onFilter={setNoteFilter} onOpen={setViewNote} />}
-          {tab === "add" && <AddNote goals={goals} onAdd={async (n, img) => { await addNote(n, img); setTab("log"); }} />}
-          {tab === "goals" && <Goals goals={goals} notes={notes} onSave={saveGoals} />}
-          {tab === "milestones" && <Milestones profile={profile} status={milestones} onSave={saveMilestones} />}
-          {tab === "assessment" && <Assessment notes={notes} profile={profile} saved={assessment} onSave={saveAssessment} weekly={weekly} onSaveWeekly={saveWeekly} evals={evals} onSaveEvals={saveEvals} evalSummary={evalSummary} onSaveEvalSummary={saveEvalSummary} />}
-          {tab === "activities" && <Activities notes={notes} goals={goals} profile={profile} recs={recs} onSave={saveRecs} />}
-          {tab === "ask" && <AskPanel notes={notes} profile={profile} chat={chat} onSave={saveChat} />}
+          {tab === "add" && (canEdit ? <AddNote goals={goals} onAdd={async (n, img) => { await addNote(n, img); setTab("log"); }} /> : <Empty title="Read-only access" body="Viewers can browse the full record but can't add notes." />)}
+          {tab === "goals" && <Goals goals={goals} notes={notes} onSave={saveGoals} canEdit={canEdit} />}
+          {tab === "milestones" && <Milestones profile={profile} status={milestones} onSave={saveMilestones} canEdit={canEdit} />}
+          {tab === "assessment" && <Assessment notes={notes} profile={profile} saved={assessment} onSave={saveAssessment} weekly={weekly} onSaveWeekly={saveWeekly} evals={evals} onSaveEvals={saveEvals} evalSummary={evalSummary} onSaveEvalSummary={saveEvalSummary} canEdit={canEdit} />}
+          {tab === "activities" && <Activities notes={notes} goals={goals} profile={profile} recs={recs} onSave={saveRecs} canEdit={canEdit} />}
+          {tab === "ask" && <AskPanel notes={notes} profile={profile} chat={chat} onSave={saveChat} canEdit={canEdit} />}
         </main>
       </div>
       {exitHint && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full text-sm text-white shadow-lg" style={{ background: INK }}>Press back again to exit</div>}
-      {viewed && <NoteView note={viewed} goal={goals.find((g) => g.id === viewed.goalId)} goals={goals} notes={notes} profile={profile} onClose={() => setViewNote(null)} onDelete={deleteNote} onUpdate={(id, patch) => saveNotes(notes.map((n) => n.id === id ? { ...n, ...patch } : n))} />}
+      {viewed && <NoteView note={viewed} goal={goals.find((g) => g.id === viewed.goalId)} goals={goals} notes={notes} profile={profile} onClose={() => setViewNote(null)} onDelete={deleteNote} onUpdate={(id, patch) => saveNotes(notes.map((n) => n.id === id ? { ...n, ...patch } : n))} canEdit={canEdit} />}
     </div>
   );
 }
 
 /* ---------- header + nav ---------- */
-function Header({ profile, onSave, count, onExport, onImport, user }) {
+function Header({ profile, onSave, count, onExport, onImport, user, role, members, onRefreshMembers }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
   const fileRef = useRef();
@@ -416,7 +446,7 @@ function Header({ profile, onSave, count, onExport, onImport, user }) {
           <h1 className="font-semibold tracking-tight text-xl sm:text-2xl leading-tight truncate">{profile.name ? `${profile.name}'s Progress` : "My Child's Progress"}</h1>
           <p className="text-xs sm:text-sm" style={{ color: SUB }}>{age ? `${age} · ` : ""}{count} note{count === 1 ? "" : "s"} across the care team</p>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-sm px-3 py-1.5 rounded-lg tabbtn" style={{ color: ACCENT, border: `1px solid ${LINE}` }}>{profile.name ? "Edit" : "Set up"}</button>
+        <button onClick={() => setOpen((o) => !o)} className="text-sm px-3 py-1.5 rounded-lg tabbtn" style={{ color: ACCENT, border: `1px solid ${LINE}` }}>{role === "viewer" ? "Care team" : profile.name ? "Edit" : "Set up"}</button>
       </div>
       {open && (
         <div style={{ borderTop: `1px solid ${LINE}`, background: PAPER }}>
@@ -424,35 +454,96 @@ function Header({ profile, onSave, count, onExport, onImport, user }) {
             <Field label="Child's name or nickname" className="flex-1 min-w-[180px]">
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Sam" className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} />
             </Field>
-            <Field label="Date of birth" className="min-w-[150px]">
-              <input type="date" value={draft.dob} onChange={(e) => setDraft({ ...draft, dob: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} />
-            </Field>
-            <button onClick={() => { onSave(draft); setOpen(false); }} className="px-4 py-2 rounded-lg text-sm text-white font-medium" style={{ background: ACCENT }}>Save</button>
+            {role === "owner" && (
+              <Field label="Date of birth" className="min-w-[150px]">
+                <input type="date" value={draft.dob} onChange={(e) => setDraft({ ...draft, dob: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} />
+              </Field>
+            )}
+            {role === "owner" && <button onClick={() => { onSave(draft); setOpen(false); }} className="px-4 py-2 rounded-lg text-sm text-white font-medium" style={{ background: ACCENT }}>Save</button>}
           </div>
           <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-4 flex flex-wrap gap-2 items-center">
             <button onClick={onExport} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Download size={13} /> Backup data</button>
-            <button onClick={() => fileRef.current?.click()} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Upload size={13} /> Restore backup</button>
+            {role === "owner" && <button onClick={() => fileRef.current?.click()} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Upload size={13} /> Restore backup</button>}
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; if (!window.confirm("Restoring replaces ALL current data in this app with the backup. Continue?")) return; const n = await onImport(f); setMsg(n < 0 ? "Couldn't read that backup file." : `Restored ${n} note${n === 1 ? "" : "s"}.`); }} />
             {msg && <span className="text-xs font-medium" style={{ color: ACCENT }}>{msg}</span>}
             <span className="ml-auto text-[11px] inline-flex items-center gap-2" style={{ color: SUB }}>{user?.email}<button onClick={async () => { await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); location.reload(); }} className="inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}><LogOut size={12} /> Sign out</button></span>
             <span className="text-[11px] w-full" style={{ color: SUB }}>Data is stored in your account and follows you across devices. Backups are still a good habit — the file includes notes, scans, goals, milestones, and settings.</span>
+          </div>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-4">
+            <CareTeam role={role} members={members} onRefreshMembers={onRefreshMembers} />
           </div>
         </div>
       )}
     </header>
   );
 }
-function Nav({ tab, setTab }) {
+
+function CareTeam({ role, members, onRefreshMembers }) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(null);
+  const [link, setLink] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) onRefreshMembers(); }, [open]);
+
+  const makeInvite = async (r) => {
+    setBusy(true); setCreating(r); setLink("");
+    try {
+      const res = await fetch("/api/invite", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ role: r }) });
+      const j = await res.json();
+      setLink(j.url || "");
+    } catch {} finally { setBusy(false); }
+  };
+  const copyLink = async () => { if (await copyText(link)) { setCopied(true); setTimeout(() => setCopied(false), 1800); } };
+
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)} className="text-xs font-medium inline-flex items-center gap-1.5" style={{ color: ACCENT }}>
+        <Users size={13} /> Care team {members.length > 0 ? `(${members.length})` : ""}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {members.map((m, i) => (
+            <div key={i} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: PAPER }}>
+              <span>{m.name || m.email}</span>
+              <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: ACCENT + "18", color: ACCENT, fontSize: 10 }}>{m.role}</span>
+            </div>
+          ))}
+          {role === "owner" && (
+            <div className="pt-1">
+              {!link ? (
+                <div className="flex gap-2">
+                  <button disabled={busy} onClick={() => makeInvite("owner")} className="flex-1 text-xs py-2 rounded-lg font-medium disabled:opacity-60" style={{ border: `1px solid ${LINE}`, background: CARD, color: ACCENT }}>+ Invite co-owner</button>
+                  <button disabled={busy} onClick={() => makeInvite("viewer")} className="flex-1 text-xs py-2 rounded-lg font-medium disabled:opacity-60" style={{ border: `1px solid ${LINE}`, background: CARD, color: ACCENT }}>+ Invite viewer</button>
+                </div>
+              ) : (
+                <div className="text-xs">
+                  <p className="mb-1" style={{ color: SUB }}>Share this link ({creating === "owner" ? "co-owner" : "viewer"} access, expires in 7 days):</p>
+                  <div className="flex gap-2">
+                    <input readOnly value={link} onFocus={(e) => e.target.select()} className="flex-1 px-2 py-1.5 rounded-lg text-[11px]" style={{ border: `1px solid ${LINE}`, background: PAPER }} />
+                    <button onClick={copyLink} className="px-2.5 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>{copied ? <Check size={13} /> : <Copy size={13} />}</button>
+                  </div>
+                  <button onClick={() => setLink("")} className="mt-1.5 font-medium" style={{ color: SUB }}>Done</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+function Nav({ tab, setTab, role }) {
   const items = [
     { k: "dashboard", label: "Dashboard", Icon: Home },
     { k: "log", label: "Notes", Icon: FileText },
-    { k: "add", label: "Add", Icon: Plus },
+    { k: "add", label: "Add", Icon: Plus, ownerOnly: true },
     { k: "goals", label: "Goals", Icon: Flag },
     { k: "milestones", label: "Milestones", Icon: Baby },
     { k: "assessment", label: "Assessment", Icon: Sparkles },
     { k: "activities", label: "Activities", Icon: Target },
     { k: "ask", label: "Ask", Icon: Bot },
-  ];
+  ].filter((it) => !it.ownerOnly || role === "owner");
   return (
     <>
       <nav className="hidden sm:flex gap-2 mt-4 flex-wrap no-print">
@@ -520,14 +611,16 @@ function goalStats(goal, notes) {
 }
 
 /* ---------- dashboard ---------- */
-function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
+function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline, canEdit }) {
   if (notes.length === 0)
     return (
-      <Empty title="Start your child's record" body="Add notes from each session — type them or scan the teacher's copy — and the picture builds itself.">
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button onClick={() => setTab("add")} className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: ACCENT }}>Add first note</button>
-          <button onClick={onSample} className="px-4 py-2 rounded-lg text-sm" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>Load sample data</button>
-        </div>
+      <Empty title="Start your child's record" body={canEdit ? "Add notes from each session — type them or scan the teacher's copy — and the picture builds itself." : "No notes have been added yet."}>
+        {canEdit && (
+          <div className="flex flex-wrap gap-2 justify-center">
+            <button onClick={() => setTab("add")} className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: ACCENT }}>Add first note</button>
+            <button onClick={onSample} className="px-4 py-2 rounded-lg text-sm" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>Load sample data</button>
+          </div>
+        )}
       </Empty>
     );
 
@@ -822,7 +915,7 @@ function ScanIntake({ goals, onSubmit }) {
 }
 
 /* ---------- goals ---------- */
-function Goals({ goals, notes, onSave }) {
+function Goals({ goals, notes, onSave, canEdit }) {
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState(null);
   const [draft, setDraft] = useState({ name: "", domain: DOMAINS[0], target: 5 });
@@ -852,6 +945,7 @@ function Goals({ goals, notes, onSave }) {
             </div>
             <div className="text-right">{current ? <LevelPill v={current} /> : <span className="text-xs" style={{ color: SUB }}>No linked notes</span>}</div>
           </div>
+          {!canEdit && <div />}
           {data.length > 1 && (
             <div style={{ height: 190 }} className="mt-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -866,10 +960,12 @@ function Goals({ goals, notes, onSave }) {
             </div>
           )}
         </Card>
-        <div className="flex gap-2">
-          <button onClick={() => toggleStatus(detail)} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: detail.status === "achieved" ? CARD : ACCENT, color: detail.status === "achieved" ? ACCENT : "#fff", border: `1px solid ${detail.status === "achieved" ? LINE : ACCENT}` }}>{detail.status === "achieved" ? "Reopen goal" : "Mark achieved"}</button>
-          <button onClick={() => remove(detail.id)} className="px-4 py-2.5 rounded-xl text-sm" style={{ color: "#C0492E", border: `1px solid ${LINE}` }}>Delete</button>
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <button onClick={() => toggleStatus(detail)} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: detail.status === "achieved" ? CARD : ACCENT, color: detail.status === "achieved" ? ACCENT : "#fff", border: `1px solid ${detail.status === "achieved" ? LINE : ACCENT}` }}>{detail.status === "achieved" ? "Reopen goal" : "Mark achieved"}</button>
+            <button onClick={() => remove(detail.id)} className="px-4 py-2.5 rounded-xl text-sm" style={{ color: "#C0492E", border: `1px solid ${LINE}` }}>Delete</button>
+          </div>
+        )}
         <div>
           <p className="text-xs font-medium mb-2 px-1" style={{ color: SUB }}>Linked notes ({linked.length})</p>
           <div className="space-y-2">
@@ -885,7 +981,7 @@ function Goals({ goals, notes, onSave }) {
 
   return (
     <div className="space-y-4">
-      {!creating
+      {canEdit && (!creating
         ? <button onClick={() => setCreating(true)} className="w-full py-3 rounded-xl text-white font-medium flex items-center justify-center gap-2" style={{ background: ACCENT }}><Plus size={17} /> New goal</button>
         : (
           <Card>
@@ -895,7 +991,7 @@ function Goals({ goals, notes, onSave }) {
             <div className="mt-3"><span className="block text-xs mb-2 font-medium" style={{ color: SUB }}>Target level</span><div className="flex flex-wrap gap-2">{LEVELS.map((l) => { const on = draft.target === l.v; return <button key={l.v} onClick={() => setDraft({ ...draft, target: l.v })} className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: on ? l.color : CARD, color: on ? "#fff" : l.color, border: `1px solid ${on ? l.color : LINE}` }}>{l.label}</button>; })}</div></div>
             <div className="flex gap-2 mt-4"><button onClick={create} className="flex-1 py-2.5 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Create goal</button><button onClick={() => setCreating(false)} className="px-4 py-2.5 rounded-xl text-sm" style={{ color: SUB, border: `1px solid ${LINE}` }}>Cancel</button></div>
           </Card>
-        )}
+        ))}
 
       {goals.length === 0 && !creating && <Empty title="No goals yet" body="Track a specific skill over time — link session notes to it and watch the trend." />}
 
@@ -931,7 +1027,7 @@ function Goals({ goals, notes, onSave }) {
 const MS_CATS = [["se", "Social / Emotional"], ["lc", "Language / Communication"], ["cog", "Cognitive"], ["mv", "Movement / Physical"]];
 const MS_SOURCE = "https://www.cdc.gov/act-early/milestones/index.html";
 
-function Milestones({ profile, status, onSave }) {
+function Milestones({ profile, status, onSave, canEdit }) {
   const months = useMemo(() => {
     if (!profile.dob) return 36;
     const b = new Date(profile.dob + "T00:00:00"), n = new Date();
@@ -972,7 +1068,7 @@ function Milestones({ profile, status, onSave }) {
         </select>
       </div>
 
-      {band.type === "checklist" ? <MsChecklist band={band} status={status} onSave={onSave} sel={sel} /> : <MsGuide band={band} />}
+      {band.type === "checklist" ? <MsChecklist band={band} status={status} onSave={onSave} sel={sel} canEdit={canEdit} /> : <MsGuide band={band} />}
 
       <p className="text-[11px] px-1 leading-relaxed" style={{ color: SUB }}>
         Source: CDC “Learn the Signs. Act Early.” (2022 revision) for ages 2 months–5 years; CDC child-development guidance for 6–14 years. Not a substitute for standardized, validated developmental screening. If you have concerns, talk with your child's doctor. <a href={MS_SOURCE} target="_blank" rel="noreferrer" style={{ color: ACCENT }}>cdc.gov <ExternalLink size={10} className="inline" /></a>
@@ -981,7 +1077,7 @@ function Milestones({ profile, status, onSave }) {
   );
 }
 
-function MsChecklist({ band, status, onSave, sel }) {
+function MsChecklist({ band, status, onSave, sel, canEdit }) {
   const cur = status[sel] || {};
   const setItem = (key, val) => onSave({ ...status, [sel]: { ...cur, [key]: cur[key] === val ? undefined : val } });
   const all = MS_CATS.flatMap(([ck]) => (band.data[ck] || []).map((_, i) => ck + i));
@@ -1009,8 +1105,8 @@ function MsChecklist({ band, status, onSave, sel }) {
                   <div key={key} className="flex items-start gap-3">
                     <p className="text-sm flex-1 leading-relaxed" style={{ color: "#3E5450" }}>{t}</p>
                     <div className="flex gap-1 shrink-0">
-                      <button onClick={() => setItem(key, "yes")} className="w-8 h-8 rounded-lg grid place-items-center" style={{ background: val === "yes" ? "#6FB05A" : CARD, color: val === "yes" ? "#fff" : "#6FB05A", border: `1px solid ${val === "yes" ? "#6FB05A" : LINE}` }} title="Reached" aria-label="Reached"><Check size={15} /></button>
-                      <button onClick={() => setItem(key, "notyet")} className="px-2 h-8 rounded-lg text-[11px] font-medium" style={{ background: val === "notyet" ? "#E8843C" : CARD, color: val === "notyet" ? "#fff" : "#C0785A", border: `1px solid ${val === "notyet" ? "#E8843C" : LINE}` }}>Not yet</button>
+                      <button disabled={!canEdit} onClick={() => setItem(key, "yes")} className="w-8 h-8 rounded-lg grid place-items-center disabled:opacity-70" style={{ background: val === "yes" ? "#6FB05A" : CARD, color: val === "yes" ? "#fff" : "#6FB05A", border: `1px solid ${val === "yes" ? "#6FB05A" : LINE}` }} title="Reached" aria-label="Reached"><Check size={15} /></button>
+                      <button disabled={!canEdit} onClick={() => setItem(key, "notyet")} className="px-2 h-8 rounded-lg text-[11px] font-medium disabled:opacity-70" style={{ background: val === "notyet" ? "#E8843C" : CARD, color: val === "notyet" ? "#fff" : "#C0785A", border: `1px solid ${val === "notyet" ? "#E8843C" : LINE}` }}>Not yet</button>
                     </div>
                   </div>
                 );
@@ -1049,7 +1145,7 @@ function digest(notes) {
   DISC_KEYS.forEach((k) => { if (!byDisc[k]) return; out += `\n## ${k}\n`; byDisc[k].forEach((n) => { out += `- ${n.date} | ${n.domain}${n.skill ? " / " + n.skill : ""} | level ${n.progress}/5 (${levelInfo(n.progress).label}): ${n.content}\n`; }); });
   return out.trim();
 }
-function Assessment({ notes, profile, saved, onSave, weekly, onSaveWeekly, evals, onSaveEvals, evalSummary, onSaveEvalSummary }) {
+function Assessment({ notes, profile, saved, onSave, weekly, onSaveWeekly, evals, onSaveEvals, evalSummary, onSaveEvalSummary, canEdit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const weeks = useMemo(() => {
@@ -1085,7 +1181,7 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
           <div className="flex-1">
             <h2 className="font-semibold tracking-tight text-lg">Developmental summary</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>Reads all {notes.length} notes and pulls together the trends, wins, and good questions for your next team meeting. A summary of what's documented — it supports your therapists' judgment, not replaces it.</p>
-            <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Reading the notes…</> : <><Sparkles size={16} /> {saved ? "Regenerate" : "Generate summary"}</>}</button>
+            {canEdit && <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Reading the notes…</> : <><Sparkles size={16} /> {saved ? "Regenerate" : "Generate summary"}</>}</button>}
             {error && <p className="text-sm mt-2" style={{ color: "#C0492E" }}>{error}</p>}
           </div>
         </div>
@@ -1103,11 +1199,11 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
           <h3 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><ClipboardList size={17} style={{ color: ACCENT }} /> Week by week</h3>
           <p className="text-xs mb-3" style={{ color: SUB }}>A short assessment of each week, from that week's notes only.</p>
           <div className="space-y-3">
-            {weeks.map((w) => <WeekCard key={w.key} w={w} data={weekly[w.key]} profile={profile} onSave={(v) => onSaveWeekly({ ...weekly, [w.key]: v })} />)}
+            {weeks.map((w) => <WeekCard key={w.key} w={w} data={weekly[w.key]} profile={profile} onSave={(v) => onSaveWeekly({ ...weekly, [w.key]: v })} canEdit={canEdit} />)}
           </div>
         </div>
       )}
-      <FormalScores evals={evals} onSave={onSaveEvals} summary={evalSummary} onSaveSummary={onSaveEvalSummary} profile={profile} />
+      <FormalScores evals={evals} onSave={onSaveEvals} summary={evalSummary} onSaveSummary={onSaveEvalSummary} profile={profile} canEdit={canEdit} />
     </div>
   );
 }
@@ -1123,7 +1219,7 @@ function ListCard({ title, Icon, color, items }) {
 /* ---------- activities / recommendations ---------- */
 const STATUS = { new: { label: "New", color: SUB }, trying: { label: "Trying", color: "#0EA5E9" }, worked: { label: "Worked", color: "#6FB05A" }, didnt: { label: "Didn't fit", color: "#C0492E" } };
 
-function Activities({ notes, goals, profile, recs, onSave }) {
+function Activities({ notes, goals, profile, recs, onSave, canEdit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [handout, setHandout] = useState(false);
@@ -1168,7 +1264,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
           <div className="flex-1">
             <h2 className="font-semibold tracking-tight text-lg">Activity suggestions</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>Play-based ideas for home and school, built from the latest progress. Mark what you try — feedback shapes the next round. Ideas to try and discuss with your care team, not medical advice.</p>
-            <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Thinking of ideas…</> : <><Sparkles size={16} /> {recs.length ? "Refresh suggestions" : "Generate suggestions"}</>}</button>
+            {canEdit && <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Thinking of ideas…</> : <><Sparkles size={16} /> {recs.length ? "Refresh suggestions" : "Generate suggestions"}</>}</button>}
             {error && <p className="text-sm mt-2" style={{ color: "#C0492E" }}>{error}</p>}
           </div>
         </div>
@@ -1177,7 +1273,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
       {home.length > 0 && (
         <div>
           <h3 className="font-semibold tracking-tight text-lg mb-2 flex items-center gap-2"><Home size={17} style={{ color: ACCENT }} /> At home</h3>
-          <div className="space-y-3">{home.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} />)}</div>
+          <div className="space-y-3">{home.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} canEdit={canEdit} />)}</div>
         </div>
       )}
 
@@ -1187,7 +1283,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
             <h3 className="font-semibold tracking-tight text-lg flex items-center gap-2"><GraduationCap size={17} style={{ color: ACCENT }} /> For school</h3>
             <button onClick={() => setHandout(true)} className="text-sm inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Share2 size={14} /> Handout</button>
           </div>
-          <div className="space-y-3">{school.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} />)}</div>
+          <div className="space-y-3">{school.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} canEdit={canEdit} />)}</div>
         </div>
       )}
 
@@ -1196,7 +1292,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
   );
 }
 
-function RecCard({ r, onStatus }) {
+function RecCard({ r, onStatus, canEdit }) {
   const st = STATUS[r.status] || STATUS.new;
   return (
     <Card className="!p-4">
@@ -1209,12 +1305,14 @@ function RecCard({ r, onStatus }) {
         {r.targetSkill && <span className="inline-flex items-center gap-1"><Target size={11} /> {r.targetSkill}</span>}
         {r.why && <span className="italic">{r.why}</span>}
       </div>
-      <div className="flex gap-2">
-        {[["trying", "Trying"], ["worked", "Worked"], ["didnt", "Didn't fit"]].map(([k, lab]) => {
-          const on = r.status === k;
-          return <button key={k} onClick={() => onStatus(r.id, on ? "new" : k)} className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: on ? STATUS[k].color : CARD, color: on ? "#fff" : STATUS[k].color, border: `1px solid ${on ? STATUS[k].color : LINE}` }}>{lab}</button>;
-        })}
-      </div>
+      {canEdit && (
+        <div className="flex gap-2">
+          {[["trying", "Trying"], ["worked", "Worked"], ["didnt", "Didn't fit"]].map(([k, lab]) => {
+            const on = r.status === k;
+            return <button key={k} onClick={() => onStatus(r.id, on ? "new" : k)} className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: on ? STATUS[k].color : CARD, color: on ? "#fff" : STATUS[k].color, border: `1px solid ${on ? STATUS[k].color : LINE}` }}>{lab}</button>;
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -1284,7 +1382,7 @@ function Handout({ profile, notes, school, onClose }) {
 
 
 /* ---------- ask the panel ---------- */
-function AskPanel({ notes, profile, chat, onSave }) {
+function AskPanel({ notes, profile, chat, onSave, canEdit }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1353,32 +1451,47 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
         <div ref={endRef} />
       </div>
 
-      <div className="flex gap-2 items-end">
-        <textarea value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }} rows={2} placeholder="Ask anything about your child's development…" className="flex-1 px-3 py-2 rounded-xl text-sm leading-relaxed resize-none" style={{ border: `1px solid ${LINE}`, background: CARD }} />
-        <button onClick={() => ask()} disabled={busy || !q.trim()} className="w-11 h-11 rounded-xl grid place-items-center text-white disabled:opacity-40 shrink-0" style={{ background: ACCENT }} aria-label="Send"><Send size={18} /></button>
-      </div>
+      {canEdit ? (
+        <div className="flex gap-2 items-end">
+          <textarea value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }} rows={2} placeholder="Ask anything about your child's development…" className="flex-1 px-3 py-2 rounded-xl text-sm leading-relaxed resize-none" style={{ border: `1px solid ${LINE}`, background: CARD }} />
+          <button onClick={() => ask()} disabled={busy || !q.trim()} className="w-11 h-11 rounded-xl grid place-items-center text-white disabled:opacity-40 shrink-0" style={{ background: ACCENT }} aria-label="Send"><Send size={18} /></button>
+        </div>
+      ) : (
+        <p className="text-xs px-1" style={{ color: SUB }}>Viewers can read past answers but can't ask new questions.</p>
+      )}
       <p className="text-[11px] px-1" style={{ color: SUB }}>Each question sends your child's notes to the AI so answers can be grounded in them.</p>
     </div>
   );
 }
 
 /* ---------- login ---------- */
-function Login() {
+function Login({ inviteNotice }) {
+  const features = [
+    "Log session notes from every therapist, teacher, and specialist in one place",
+    "Track goals and CDC developmental milestones over time",
+    "Scan handwritten notes — AI reads and structures them for your review",
+    "Get plain-language progress summaries and home/school activity ideas",
+    "Invite your co-parent or your child's doctor to the same record",
+  ];
   return (
     <div style={{ background: PAPER, color: INK }} className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">
         <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4 text-white text-xl font-semibold" style={{ background: ACCENT }}>D</div>
         <h1 className="font-semibold tracking-tight text-2xl mb-1">Development Tracker</h1>
-        <p className="text-sm mb-6" style={{ color: SUB }}>A private space to follow your child's therapy progress — notes, goals, milestones, and guidance in one place.</p>
+        <p className="text-sm mb-5" style={{ color: SUB }}>A private space for families to follow a child's therapy and developmental progress, and coordinate with their care team.</p>
+        <ul className="text-left space-y-1.5 mb-6">
+          {features.map((f, i) => <li key={i} className="flex gap-2 text-xs leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
+        </ul>
+        {inviteNotice && <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: ACCENT + "14", color: ACCENT }}>{inviteNotice}</p>}
         <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
-        <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to you. Signing in lets you use the same data on any device.</p>
+        <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to family members and care-team contacts you invite. <a href="/privacy" style={{ color: ACCENT }}>Privacy policy</a></p>
       </div>
     </div>
   );
 }
 
 /* ---------- read-only note view ---------- */
-function NoteView({ note, goal, goals, notes, profile, onClose, onDelete, onUpdate }) {
+function NoteView({ note, goal, goals, notes, profile, onClose, onDelete, onUpdate, canEdit }) {
   useBackClose(true, onClose);
   const [mode, setMode] = useState("view");
   useBackClose(mode === "edit", () => setMode("view"));
@@ -1409,7 +1522,7 @@ ${history}`;
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => (mode === "edit" ? setMode("view") : onClose())} className="text-sm inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}>← Back</button>
-          {mode === "view" && (
+          {mode === "view" && canEdit && (
             <div className="flex gap-2">
               <button onClick={() => setMode("edit")} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Pencil size={13} /> Edit</button>
               <button onClick={() => { if (window.confirm("Delete this note? This can't be undone.")) { onDelete(note.id); onClose(); } }} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: "#C0492E", border: `1px solid ${LINE}`, background: CARD }}><Trash2 size={13} /> Delete</button>
@@ -1435,17 +1548,19 @@ ${history}`;
           {goal && <p className="text-xs mt-3 inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={12} /> Linked goal: {goal.name}</p>}
           {note.source === "scan" && <NoteImage noteId={note.id} />}
         </Card>
+        {(canEdit || note.insight) && (
         <Card className="mt-4" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h3 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={16} style={{ color: ACCENT }} /> AI insight</h3>
-            <button onClick={runInsight} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {note.insight ? "Regenerate" : "Assess this note"}</button>
+            {canEdit && <button onClick={runInsight} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {note.insight ? "Regenerate" : "Assess this note"}</button>}
           </div>
           {err && <p className="text-xs mb-1" style={{ color: "#C0492E" }}>{err}</p>}
           {note.insight
             ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{note.insight.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(note.insight.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · an aid to understanding, not a clinical judgment</p></>
             : <p className="text-xs" style={{ color: SUB }}>Explains this note in plain language, reads it against earlier notes in the same area, and suggests questions for the provider.</p>}
         </Card>
-        <p className="text-[11px] mt-3 px-1" style={{ color: SUB }}>{note.editedAt ? `Edited ${new Date(note.editedAt).toLocaleDateString(undefined, { dateStyle: "medium" })} · ` : ""}Tap Edit to fix anything the scan or a typo got wrong.</p>
+        )}
+        {canEdit && <p className="text-[11px] mt-3 px-1" style={{ color: SUB }}>{note.editedAt ? `Edited ${new Date(note.editedAt).toLocaleDateString(undefined, { dateStyle: "medium" })} · ` : ""}Tap Edit to fix anything the scan or a typo got wrong.</p>}
         </>)}
       </div>
     </div>
@@ -1453,7 +1568,7 @@ ${history}`;
 }
 
 /* ---------- weekly assessment card ---------- */
-function WeekCard({ w, data, profile, onSave }) {
+function WeekCard({ w, data, profile, onSave, canEdit }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const end = new Date(w.key + "T00:00:00"); end.setDate(end.getDate() + 6);
@@ -1477,7 +1592,7 @@ Return ONLY valid JSON: {"summary":"2-3 plain sentences on how the week went","w
     <Card className="!p-4">
       <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
         <div><span className="font-medium text-sm">Week {w.no}</span> <span className="text-xs" style={{ color: SUB }}>· {range} · {w.notes.length} note{w.notes.length === 1 ? "" : "s"}</span></div>
-        <button onClick={gen} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {data ? "Regenerate" : "Assess week"}</button>
+        {canEdit && <button onClick={gen} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {data ? "Regenerate" : "Assess week"}</button>}
       </div>
       {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
       {data && (
@@ -1493,7 +1608,7 @@ Return ONLY valid JSON: {"summary":"2-3 plain sentences on how the week went","w
 
 /* ---------- formal assessment scores ---------- */
 const EVAL_TOOLS = ["VB-MAPP", "ABLLS-R", "Vineland-3", "CARS-2", "PEP-3", "Other"];
-function FormalScores({ evals, onSave, summary, onSaveSummary, profile }) {
+function FormalScores({ evals, onSave, summary, onSaveSummary, profile, canEdit }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1539,7 +1654,7 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
       <h3 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><Award size={17} style={{ color: ACCENT }} /> Formal assessment scores</h3>
       <p className="text-xs mb-3" style={{ color: SUB }}>When your team administers a standardized tool (VB-MAPP, Vineland…), log the results here to trend them over time. The scores come from the professionals — this tracks and explains them.</p>
 
-      {!adding
+      {canEdit && (!adding
         ? <button onClick={() => setAdding(true)} className="w-full py-2.5 rounded-2xl text-sm font-medium mb-3" style={{ color: ACCENT, border: `1px dashed ${ACCENT}`, background: CARD }}>+ Log a result</button>
         : (
           <Card className="mb-3">
@@ -1565,7 +1680,7 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
               <button onClick={() => setAdding(false)} className="px-4 py-2.5 rounded-2xl text-sm" style={{ color: SUB, border: `1px solid ${LINE}` }}>Cancel</button>
             </div>
           </Card>
-        )}
+        ))}
 
       <div className="space-y-3">
         {Object.entries(byTool).map(([tool, list]) => {
@@ -1598,7 +1713,7 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
                       <div className="flex flex-wrap gap-1.5 mt-0.5">{e.scores.map((sc, i) => <span key={i} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: ACCENT + "14", color: ACCENT }}>{sc.label}: {sc.value}</span>)}</div>
                       {e.notes && <p className="text-xs mt-1" style={{ color: "#3E5450" }}>{e.notes}</p>}
                     </div>
-                    <button onClick={() => remove(e.id)} className="p-1 shrink-0" style={{ color: SUB }} aria-label="Delete result"><Trash2 size={13} /></button>
+                    {canEdit && <button onClick={() => remove(e.id)} className="p-1 shrink-0" style={{ color: SUB }} aria-label="Delete result"><Trash2 size={13} /></button>}
                   </div>
                 ))}
               </div>
@@ -1611,7 +1726,7 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
         <Card className="mt-3" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h4 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={15} style={{ color: ACCENT }} /> AI reading of the scores</h4>
-            <button onClick={genSummary} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {summary ? "Regenerate" : "Explain my results"}</button>
+            {canEdit && <button onClick={genSummary} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {summary ? "Regenerate" : "Explain my results"}</button>}
           </div>
           {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
           {summary
