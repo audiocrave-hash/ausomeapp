@@ -8,6 +8,7 @@ import {
   GraduationCap, TrendingUp, Loader2, Award, Target, HelpCircle, Inbox,
   ClipboardList, Camera, Type, Check, X, Flag, Share2, Copy, Printer,
   ChevronRight, ImageIcon, AlertTriangle, Baby, ExternalLink, Hexagon,
+  Stethoscope, HeartPulse, BookOpen,
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
@@ -18,7 +19,10 @@ const DISCIPLINES = {
   "Speech Therapy": { short: "Speech", color: "#4F46E5", Icon: MessageSquare },
   "ABA": { short: "ABA", color: "#0EA5E9", Icon: Activity },
   "Occupational Therapy": { short: "OT", color: "#E8843C", Icon: Hand },
-  "SPED Teacher": { short: "Teacher", color: "#10B981", Icon: GraduationCap },
+  "SPED Teacher": { short: "SPED", color: "#10B981", Icon: GraduationCap },
+  "Class Teacher": { short: "Teacher", color: "#B45309", Icon: BookOpen },
+  "Developmental Pediatrician": { short: "Dev Pedia", color: "#8B5CF6", Icon: HeartPulse },
+  "Pediatrician": { short: "Pedia", color: "#DB2777", Icon: Stethoscope },
 };
 const DISC_KEYS = Object.keys(DISCIPLINES);
 const DOMAINS = [
@@ -563,7 +567,7 @@ function NotesLog({ notes, goals, onDelete, setTab }) {
 const OCR_PROMPT = `You are reading a photo or scan of a therapy or classroom progress note for a young child. Transcribe and structure it. Do not invent content that is not visible. If something is unreadable or uncertain, still give your best guess but list that field name in "uncertain".
 
 Return ONLY valid JSON (no markdown), shape:
-{"date":"YYYY-MM-DD or empty","provider":"person's name if written, else empty","discipline":"one of: Speech Therapy | ABA | Occupational Therapy | SPED Teacher | empty","domain":"closest of: ${DOMAINS.join(" | ")}","skill":"specific goal/skill if mentioned, else empty","summary":"a clean, readable transcription/summary of the note in plain sentences","progress":"integer 1-5 estimating progress (1 emerging .. 5 mastered) or null","uncertain":["field names you were unsure about"]}`;
+{"date":"YYYY-MM-DD or empty","provider":"person's name if written, else empty","discipline":"one of: ${DISC_KEYS.join(" | ")} | empty","domain":"closest of: ${DOMAINS.join(" | ")}","skill":"specific goal/skill if mentioned, else empty","summary":"a clean, readable transcription/summary of the note in plain sentences","progress":"integer 1-5 estimating progress (1 emerging .. 5 mastered) or null","uncertain":["field names you were unsure about"]}`;
 
 function AddNote({ goals, onAdd }) {
   const [mode, setMode] = useState("type");
