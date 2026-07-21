@@ -1,42 +1,50 @@
-# Development Tracker — Railway deployment
+# Development Tracker — v2 (accounts)
 
-A private progress tracker for your child's therapy team. Notes, goals,
-CDC milestones, scan-a-note (Claude vision), AI assessment, and
-home/school activity suggestions.
+Google sign-in · per-account data in Postgres · same data on any device.
 
-## Privacy model
-- **All child data (notes, images, goals) stays on the device** in the
-  browser's IndexedDB. Nothing is uploaded or synced to the server.
-- The only data that leaves the device is what you send during the three
-  AI actions (Scan, Assessment, Activities), which go through `/api/claude`
-  on this server, which holds your Anthropic API key. The key is never
-  exposed to the browser.
-- Consequence of on-device storage: data does not follow you across
-  devices/browsers, and clearing site data erases it.
+## What changed from v1
+- Sign in with Google; each parent gets their own private data space.
+- Notes, scans, goals, milestones, chat now live in YOUR Postgres
+  (Railway add-on) instead of the browser — so they follow the account.
+- The AI proxy now requires sign-in (nobody can burn your API credits).
+- First sign-in on a device that has old v1 data automatically imports it
+  into the account (or use Restore backup with your JSON file).
 
-## Deploy on Railway (~10 minutes)
-1. Get an API key at console.anthropic.com (Settings → API Keys).
-2. Push this folder to a GitHub repo.
-3. Railway → **New Project → Deploy from GitHub repo** → pick the repo.
-   Railway auto-detects Node and runs `npm install && npm run build`
-   then `npm start` (see `railway.json`).
-4. In the service → **Variables** → add `ANTHROPIC_API_KEY` = your key.
-5. **Settings → Networking → Generate Domain** to get your public URL.
+## One-time setup
 
-## Local development
-```bash
-npm install
-npm run build && npm start   # full app + API on http://localhost:3000
-# or `npm run dev` for hot reload of the UI only (AI calls need the server)
-```
+### 1. Postgres (Railway, ~1 min)
+Project → **Create → Database → PostgreSQL**. Then on your app service →
+Variables → **New Variable → Add Reference → DATABASE_URL** from the
+Postgres service.
 
-## Costs
-Railway hobby plan credit comfortably covers this. AI calls are
-pay-per-use on your Anthropic key — typically a few cents per
-scan/assessment/generation.
+### 2. Google sign-in (~5 min)
+1. console.cloud.google.com → create/select a project.
+2. **APIs & Services → OAuth consent screen**: External → fill app name +
+   your email → add yourself (and your spouse) under Test users → save.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**
+   → type **Web application**.
+4. Authorized redirect URI — exactly:
+   `https://YOUR-APP-DOMAIN.up.railway.app/auth/google/callback`
+5. Copy the Client ID and Client Secret.
 
-## Recommended hardening (optional)
-- Set a spending limit on your Anthropic key (console.anthropic.com).
-- Anyone with the URL can open the app (they can't see your data — it's
-  on your device — but they could use your AI proxy). If that matters,
-  add an access password or IP allowlist in front of the service.
+### 3. Variables on the app service
+- `DATABASE_URL`  (reference, from step 1)
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `ANTHROPIC_API_KEY` (you already have this)
+
+Redeploy. Open the app → "Continue with Google".
+
+## Data migration from v1
+Open the app **in the same browser you used for the pilot** and sign in —
+your old on-device data is imported into the account automatically (only
+if the account is still empty). Alternatively: header → Edit → Restore
+backup with your backup JSON.
+
+## Notes
+- Consent screen in "Testing" mode allows only listed test users — perfect
+  for a family pilot. Publish it later for a SaaS.
+- Sessions last 90 days; Sign out is in the header panel.
+- You are now the custodian of this data: enable backups on the Postgres
+  service (Railway does daily backups on paid plans) and keep exporting
+  JSON backups from the app.

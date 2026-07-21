@@ -8,7 +8,7 @@ import {
   GraduationCap, TrendingUp, Loader2, Award, Target, HelpCircle, Inbox,
   ClipboardList, Camera, Type, Check, X, Flag, Share2, Copy, Printer,
   ChevronRight, ImageIcon, AlertTriangle, Baby, ExternalLink, Hexagon,
-  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send,
+  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send, LogOut,
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
@@ -117,7 +117,13 @@ function pickBand(months) {
   return "m6";
 }
 
-/* ---------- storage (on-device IndexedDB — data never leaves this browser) ---------- */
+/* ---------- storage (per-account, synced through the server) ---------- */
+const store = {
+  async get(k, fb) { try { const r = await fetch("/api/kv/" + encodeURIComponent(k), { credentials: "same-origin" }); if (!r.ok) return fb; const d = await r.json(); return d.value == null ? fb : JSON.parse(d.value); } catch { return fb; } },
+  async set(k, v) { try { await fetch("/api/kv/" + encodeURIComponent(k), { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ value: JSON.stringify(v) }) }); } catch {} },
+  async del(k) { try { await fetch("/api/kv/" + encodeURIComponent(k), { method: "DELETE", credentials: "same-origin" }); } catch {} },
+};
+/* legacy on-device storage — read once to migrate earlier pilot data into the account */
 const idb = (() => {
   let p;
   const open = () => p || (p = new Promise((res, rej) => {
@@ -136,15 +142,22 @@ const idb = (() => {
   };
   return {
     get: (k) => tx("readonly", (s) => s.get(k)),
-    set: (k, v) => tx("readwrite", (s) => s.put(v, k)),
-    del: (k) => tx("readwrite", (s) => s.delete(k)),
+    keys: () => tx("readonly", (s) => s.getAllKeys()),
   };
 })();
-const store = {
-  async get(k, fb) { try { const v = await idb.get(k); return v === undefined ? fb : JSON.parse(v); } catch { return fb; } },
-  async set(k, v) { try { await idb.set(k, JSON.stringify(v)); } catch {} },
-  async del(k) { try { await idb.del(k); } catch {} },
-};
+async function migrateLocalData() {
+  try {
+    const already = await store.get("ndt:notes", null);
+    if (Array.isArray(already) && already.length) return;
+    const localNotes = await idb.get("ndt:notes");
+    if (!localNotes) return;
+    const keys = (await idb.keys()).filter((k) => typeof k === "string" && k.startsWith("ndt:"));
+    for (const k of keys) {
+      const v = await idb.get(k);
+      if (v !== undefined) await fetch("/api/kv/" + encodeURIComponent(k), { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ value: v }) });
+    }
+  } catch {}
+}
 const imgKey = (id) => `ndt:scan:${id}`;
 
 /* ---------- utils ---------- */
@@ -241,9 +254,16 @@ export default function App() {
   const [assessment, setAssessment] = useState(null);
   const [milestones, setMilestones] = useState({});
   const [chat, setChat] = useState([]);
+  const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => { (async () => {
+    try {
+      const r = await fetch("/api/me", { credentials: "same-origin" });
+      if (!r.ok) { setUser(null); return; }
+      setUser((await r.json()).user);
+    } catch { setUser(null); return; }
+    await migrateLocalData();
     setNotes(await store.get("ndt:notes", []));
     setGoals(await store.get("ndt:goals", []));
     setRecs(await store.get("ndt:recs", []));
@@ -298,6 +318,7 @@ export default function App() {
     } catch { return -1; }
   };
 
+  if (user === null) return <Login />;
   if (!loaded)
     return <div style={{ background: PAPER }} className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" style={{ color: ACCENT }} size={28} /></div>;
 
@@ -309,7 +330,7 @@ export default function App() {
         @media print{ body *{visibility:hidden} #handout,#handout *{visibility:visible} #handout{position:absolute;left:0;top:0;width:100%} .no-print{display:none!important} }
       `}</style>
 
-      <Header profile={profile} onSave={saveProfile} count={notes.length} onExport={exportAll} onImport={importAll} />
+      <Header profile={profile} onSave={saveProfile} count={notes.length} onExport={exportAll} onImport={importAll} user={user} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <Nav tab={tab} setTab={setTab} />
         <main className="pb-24 pt-6">
@@ -328,7 +349,7 @@ export default function App() {
 }
 
 /* ---------- header + nav ---------- */
-function Header({ profile, onSave, count, onExport, onImport }) {
+function Header({ profile, onSave, count, onExport, onImport, user }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
   const fileRef = useRef();
@@ -362,7 +383,8 @@ function Header({ profile, onSave, count, onExport, onImport }) {
             <button onClick={() => fileRef.current?.click()} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Upload size={13} /> Restore backup</button>
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; if (!window.confirm("Restoring replaces ALL current data in this app with the backup. Continue?")) return; const n = await onImport(f); setMsg(n < 0 ? "Couldn't read that backup file." : `Restored ${n} note${n === 1 ? "" : "s"}.`); }} />
             {msg && <span className="text-xs font-medium" style={{ color: ACCENT }}>{msg}</span>}
-            <span className="text-[11px] w-full" style={{ color: SUB }}>Data lives only in this browser. Download a backup regularly — it includes notes, scans, goals, milestones, and settings.</span>
+            <span className="ml-auto text-[11px] inline-flex items-center gap-2" style={{ color: SUB }}>{user?.email}<button onClick={async () => { await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); location.reload(); }} className="inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}><LogOut size={12} /> Sign out</button></span>
+            <span className="text-[11px] w-full" style={{ color: SUB }}>Data is stored in your account and follows you across devices. Backups are still a good habit — the file includes notes, scans, goals, milestones, and settings.</span>
           </div>
         </div>
       )}
@@ -1255,6 +1277,21 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
         <button onClick={() => ask()} disabled={busy || !q.trim()} className="w-11 h-11 rounded-xl grid place-items-center text-white disabled:opacity-40 shrink-0" style={{ background: ACCENT }} aria-label="Send"><Send size={18} /></button>
       </div>
       <p className="text-[11px] px-1" style={{ color: SUB }}>Each question sends your child's notes to the AI so answers can be grounded in them.</p>
+    </div>
+  );
+}
+
+/* ---------- login ---------- */
+function Login() {
+  return (
+    <div style={{ background: PAPER, color: INK }} className="min-h-screen flex items-center justify-center p-6">
+      <div className="w-full max-w-sm text-center">
+        <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4 text-white text-xl font-semibold" style={{ background: ACCENT }}>D</div>
+        <h1 className="font-serif text-2xl mb-1">Development Tracker</h1>
+        <p className="text-sm mb-6" style={{ color: SUB }}>A private space to follow your child's therapy progress — notes, goals, milestones, and guidance in one place.</p>
+        <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
+        <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to you. Signing in lets you use the same data on any device.</p>
+      </div>
     </div>
   );
 }
