@@ -23,6 +23,7 @@ const DISCIPLINES = {
   "Class Teacher": { short: "Teacher", color: "#B45309", Icon: BookOpen },
   "Developmental Pediatrician": { short: "Dev Pedia", color: "#8B5CF6", Icon: HeartPulse },
   "Pediatrician": { short: "Pedia", color: "#DB2777", Icon: Stethoscope },
+  "Parent / Home": { short: "Parent", color: "#64748B", Icon: Home },
 };
 const DISC_KEYS = Object.keys(DISCIPLINES);
 const DOMAINS = [
@@ -1063,7 +1064,7 @@ function Assessment({ notes, profile, saved, onSave, weekly, onSaveWeekly, evals
   const generate = async () => {
     setLoading(true); setError("");
     const age = ageFrom(profile.dob);
-    const prompt = `You are a developmental pediatrician writing a warm, plain-language progress summary for a parent, based ONLY on the therapy notes below. Do not diagnose or invent facts. Where notes are thin, say so gently. Frame everything as support for the care team, not a replacement.
+    const prompt = `You are a developmental pediatrician writing a warm, plain-language progress summary for a parent, based ONLY on the therapy notes below. Do not diagnose or invent facts. Where notes are thin, say so gently. Notes marked 'Parent / Home' are the parent's own observations at home — weigh them as valuable first-hand context alongside the professional notes. Frame everything as support for the care team, not a replacement.
 
 Child: ${profile.name || "the child"}${age ? `, age ${age}` : ""}.
 
@@ -1132,7 +1133,7 @@ function Activities({ notes, goals, profile, recs, onSave }) {
     const age = ageFrom(profile.dob);
     const goalLines = goals.filter((g) => g.status !== "achieved").map((g) => `- ${g.name} (${g.domain})`).join("\n") || "none set";
     const feedback = recs.filter((r) => r.status !== "new").map((r) => `- [${STATUS[r.status].label}] ${r.title}`).join("\n") || "none yet";
-    const prompt = `You are a developmental pediatrician suggesting practical activities for a young child, based ONLY on the progress notes below. Activities must be play-based, low-prep, age-appropriate, and achievable. Tie each to a specific emerging skill. These are ideas for the family and teacher to try and discuss — never medical instructions.
+    const prompt = `You are a developmental pediatrician suggesting practical activities for a young child, based ONLY on the progress notes below. Activities must be play-based, low-prep, age-appropriate, and achievable. Tie each to a specific emerging skill. Notes marked 'Parent / Home' are the parent's own observations at home — weigh them as valuable first-hand context alongside the professional notes. These are ideas for the family and teacher to try and discuss — never medical instructions.
 
 Child: ${profile.name || "the child"}${age ? `, age ${age}` : ""}.
 Active goals:
@@ -1300,7 +1301,7 @@ function AskPanel({ notes, profile, chat, onSave }) {
     const history = next.slice(-8).map((m) => `${m.role === "user" ? "Parent" : "Panel"}: ${m.text}`).join("\n\n");
     const prompt = `You are an experienced multidisciplinary child-development panel — developmental pediatrician, speech-language pathologist, occupational therapist, ABA therapist, and SPED teacher — supporting the parent of ${profile.name || "a young child"}${age ? ` (${age})` : ""} who is in therapy.
 
-Ground your answer in the child's documented progress notes below when relevant, and say when the notes don't cover something. Be warm, practical, plain-language, and concise (under 250 words unless the question truly needs more). You are NOT the child's treating clinician: do not diagnose, do not give medication advice, and point significant clinical decisions back to the child's actual care team. If something sounds urgent or medical, tell the parent to contact their doctor.
+Ground your answer in the child's documented progress notes below when relevant, and say when the notes don't cover something. Notes marked 'Parent / Home' are the parent's own observations at home — weigh them as valuable first-hand context alongside the professional notes. Be warm, practical, plain-language, and concise (under 250 words unless the question truly needs more). You are NOT the child's treating clinician: do not diagnose, do not give medication advice, and point significant clinical decisions back to the child's actual care team. If something sounds urgent or medical, tell the parent to contact their doctor.
 
 Child's progress notes:
 ${digest(notes) || "(no notes logged yet)"}
@@ -1460,7 +1461,7 @@ function WeekCard({ w, data, profile, onSave }) {
   const gen = async () => {
     setBusy(true); setErr("");
     const age = ageFrom(profile.dob);
-    const prompt = `You are a developmental pediatrician writing a very short weekly progress check-in for a parent, based ONLY on this week's therapy notes for ${profile.name || "the child"}${age ? ` (${age})` : ""}. Do not diagnose or invent facts; one week is a small sample, so keep conclusions modest.
+    const prompt = `You are a developmental pediatrician writing a very short weekly progress check-in for a parent, based ONLY on this week's therapy notes for ${profile.name || "the child"}${age ? ` (${age})` : ""}. Do not diagnose or invent facts; one week is a small sample, so keep conclusions modest. Notes marked 'Parent / Home' are the parent's own observations at home — weigh them as valuable first-hand context alongside the professional notes.
 
 This week's notes:
 ${digest(w.notes)}
