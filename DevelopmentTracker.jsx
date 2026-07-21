@@ -8,7 +8,7 @@ import {
   GraduationCap, TrendingUp, Loader2, Award, Target, HelpCircle, Inbox,
   ClipboardList, Camera, Type, Check, X, Flag, Share2, Copy, Printer,
   ChevronRight, ImageIcon, AlertTriangle, Baby, ExternalLink, Hexagon,
-  Stethoscope, HeartPulse, BookOpen, Download, Upload,
+  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send,
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
@@ -177,6 +177,14 @@ async function claudeJSON(content, maxTokens = 1600) {
   const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
+async function claudeText(content, maxTokens = 1200) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content }] }),
+  });
+  const data = await res.json();
+  return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+}
 
 /* ---------- sample data ---------- */
 function sampleNotes() {
@@ -208,6 +216,7 @@ export default function App() {
   const [profile, setProfile] = useState({ name: "", dob: "" });
   const [assessment, setAssessment] = useState(null);
   const [milestones, setMilestones] = useState({});
+  const [chat, setChat] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => { (async () => {
@@ -217,6 +226,7 @@ export default function App() {
     setProfile(await store.get("ndt:profile", { name: "", dob: "" }));
     setAssessment(await store.get("ndt:assessment", null));
     setMilestones(await store.get("ndt:milestones", {}));
+    setChat(await store.get("ndt:chat", []));
     setLoaded(true);
   })(); }, []);
 
@@ -226,6 +236,7 @@ export default function App() {
   const saveProfile = (p) => { setProfile(p); store.set("ndt:profile", p); };
   const saveAssessment = (a) => { setAssessment(a); store.set("ndt:assessment", a); };
   const saveMilestones = (m) => { setMilestones(m); store.set("ndt:milestones", m); };
+  const saveChat = (c) => { setChat(c); store.set("ndt:chat", c); };
 
   const addNote = async (n, imageDataUrl) => {
     const id = uid();
@@ -237,7 +248,7 @@ export default function App() {
   const exportAll = async () => {
     const images = {};
     for (const n of notes) if (n.source === "scan") { const img = await store.get(imgKey(n.id), null); if (img) images[n.id] = img; }
-    const payload = { app: "dev-tracker", version: 1, exportedAt: new Date().toISOString(), data: { notes, goals, recs, profile, assessment, milestones }, images };
+    const payload = { app: "dev-tracker", version: 1, exportedAt: new Date().toISOString(), data: { notes, goals, recs, profile, assessment, milestones, chat }, images };
     const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -257,6 +268,7 @@ export default function App() {
       saveProfile(d.profile && typeof d.profile === "object" ? d.profile : { name: "", dob: "" });
       saveAssessment(d.assessment || null);
       saveMilestones(d.milestones && typeof d.milestones === "object" ? d.milestones : {});
+      saveChat(Array.isArray(d.chat) ? d.chat : []);
       if (p.images) for (const [id, img] of Object.entries(p.images)) await store.set(imgKey(id), img);
       return nn.length;
     } catch { return -1; }
@@ -284,6 +296,7 @@ export default function App() {
           {tab === "milestones" && <Milestones profile={profile} status={milestones} onSave={saveMilestones} />}
           {tab === "assessment" && <Assessment notes={notes} profile={profile} saved={assessment} onSave={saveAssessment} />}
           {tab === "activities" && <Activities notes={notes} goals={goals} profile={profile} recs={recs} onSave={saveRecs} />}
+          {tab === "ask" && <AskPanel notes={notes} profile={profile} chat={chat} onSave={saveChat} />}
         </main>
       </div>
     </div>
@@ -341,6 +354,7 @@ function Nav({ tab, setTab }) {
     { k: "milestones", label: "Milestones", Icon: Baby },
     { k: "assessment", label: "Assessment", Icon: Sparkles },
     { k: "activities", label: "Activities", Icon: Target },
+    { k: "ask", label: "Ask", Icon: Bot },
   ];
   return (
     <nav className="flex gap-1 sm:gap-2 mt-4 overflow-x-auto no-print">
@@ -1137,6 +1151,86 @@ function Handout({ profile, notes, school, onClose }) {
           <button onClick={() => window.print()} className="px-4 py-2.5 rounded-xl text-sm inline-flex items-center gap-2" style={{ color: ACCENT, border: `1px solid ${LINE}` }}><Printer size={16} /> Print / PDF</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/* ---------- ask the panel ---------- */
+function AskPanel({ notes, profile, chat, onSave }) {
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const endRef = useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [chat.length, busy]);
+
+  const ask = async (text) => {
+    const question = (text ?? q).trim();
+    if (!question || busy) return;
+    setQ(""); setError(""); setBusy(true);
+    const next = [...chat, { role: "user", text: question, at: Date.now() }];
+    onSave(next);
+    const age = ageFrom(profile.dob);
+    const history = next.slice(-8).map((m) => `${m.role === "user" ? "Parent" : "Panel"}: ${m.text}`).join("\n\n");
+    const prompt = `You are an experienced multidisciplinary child-development panel — developmental pediatrician, speech-language pathologist, occupational therapist, ABA therapist, and SPED teacher — supporting the parent of ${profile.name || "a young child"}${age ? ` (${age})` : ""} who is in therapy.
+
+Ground your answer in the child's documented progress notes below when relevant, and say when the notes don't cover something. Be warm, practical, plain-language, and concise (under 250 words unless the question truly needs more). You are NOT the child's treating clinician: do not diagnose, do not give medication advice, and point significant clinical decisions back to the child's actual care team. If something sounds urgent or medical, tell the parent to contact their doctor.
+
+Child's progress notes:
+${digest(notes) || "(no notes logged yet)"}
+
+Conversation so far:
+${history}
+
+Reply to the parent's last message. Plain text only, no markdown headers.`;
+    try {
+      const a = await claudeText([{ type: "text", text: prompt }], 1200);
+      onSave([...next, { role: "assistant", text: a, at: Date.now() }]);
+    } catch { setError("Couldn't answer just now. Please try again."); }
+    finally { setBusy(false); }
+  };
+
+  const starters = [
+    "How can we build more words at home?",
+    "What should I ask at our next team meeting?",
+    "How do I handle meltdowns during transitions?",
+  ];
+
+  return (
+    <div className="space-y-4">
+      <Card style={{ background: "linear-gradient(180deg,#F0F7F5,#FFFFFF)" }}>
+        <div className="flex items-start gap-3">
+          <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Bot size={20} style={{ color: ACCENT }} /></span>
+          <div className="flex-1">
+            <h2 className="font-serif text-lg">Ask the panel</h2>
+            <p className="text-sm mt-0.5" style={{ color: SUB }}>Answers drawing on developmental pediatrics, speech, OT, ABA, and SPED perspectives — grounded in your child's notes. Information and ideas, not medical advice; clinical decisions stay with your real care team.</p>
+          </div>
+          {chat.length > 0 && <button onClick={() => { if (window.confirm("Clear this conversation?")) onSave([]); }} className="text-xs shrink-0" style={{ color: SUB }}>Clear</button>}
+        </div>
+      </Card>
+
+      {chat.length === 0 && (
+        <div className="flex flex-wrap gap-2">
+          {starters.map((s) => <button key={s} onClick={() => ask(s)} className="text-xs px-3 py-2 rounded-full" style={{ border: `1px solid ${LINE}`, background: CARD, color: ACCENT }}>{s}</button>)}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {chat.map((m, i) => (
+          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={m.role === "user" ? { background: ACCENT, color: "#fff" } : { background: CARD, border: `1px solid ${LINE}`, color: "#3C4B50" }}>{m.text}</div>
+          </div>
+        ))}
+        {busy && <div className="flex justify-start"><div className="rounded-2xl px-4 py-2.5" style={{ background: CARD, border: `1px solid ${LINE}` }}><Loader2 size={16} className="animate-spin" style={{ color: ACCENT }} /></div></div>}
+        {error && <p className="text-sm" style={{ color: "#C0492E" }}>{error}</p>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="flex gap-2 items-end">
+        <textarea value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }} rows={2} placeholder="Ask anything about your child's development…" className="flex-1 px-3 py-2 rounded-xl text-sm leading-relaxed resize-none" style={{ border: `1px solid ${LINE}`, background: CARD }} />
+        <button onClick={() => ask()} disabled={busy || !q.trim()} className="w-11 h-11 rounded-xl grid place-items-center text-white disabled:opacity-40 shrink-0" style={{ background: ACCENT }} aria-label="Send"><Send size={18} /></button>
+      </div>
+      <p className="text-[11px] px-1" style={{ color: SUB }}>Each question sends your child's notes to the AI so answers can be grounded in them.</p>
     </div>
   );
 }
