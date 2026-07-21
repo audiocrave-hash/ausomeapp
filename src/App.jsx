@@ -8,12 +8,12 @@ import {
   GraduationCap, TrendingUp, Loader2, Award, Target, HelpCircle, Inbox,
   ClipboardList, Camera, Type, Check, X, Flag, Share2, Copy, Printer,
   ChevronRight, ImageIcon, AlertTriangle, Baby, ExternalLink, Hexagon,
-  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send, LogOut,
+  Stethoscope, HeartPulse, BookOpen, Download, Upload, Bot, Send, LogOut, Pencil,
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
-const INK = "#17313A", SUB = "#5B7078", PAPER = "#F7F6F1", CARD = "#FFFFFF",
-  LINE = "#E4E7E1", ACCENT = "#0E8577";
+const INK = "#132E32", SUB = "#5C7672", PAPER = "#F7FAF9", CARD = "#FFFFFF",
+  LINE = "#DCE7E3", ACCENT = "#0F766E";
 
 const DISCIPLINES = {
   "Speech Therapy": { short: "Speech", color: "#4F46E5", Icon: MessageSquare },
@@ -41,7 +41,7 @@ const LEVELS = [
   { v: 2, label: "Developing", color: "#E0A34E" },
   { v: 3, label: "Progressing", color: "#C9B94A" },
   { v: 4, label: "Mostly independent", color: "#6FB05A" },
-  { v: 5, label: "Mastered", color: "#0E8577" },
+  { v: 5, label: "Mastered", color: "#3B8A5A" },
 ];
 const levelInfo = (v) => LEVELS.find((l) => l.v === v) || LEVELS[0];
 
@@ -164,6 +164,7 @@ const imgKey = (id) => `ndt:scan:${id}`;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKey = (d) => d.slice(0, 7);
+const weekStart = (d) => { const x = new Date(d + "T00:00:00"); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); return x.toISOString().slice(0, 10); };
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 const fmtMonth = (m) => new Date(m + "-01T00:00:00").toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 function ageFrom(dob) {
@@ -267,6 +268,9 @@ export default function App() {
   const [assessment, setAssessment] = useState(null);
   const [milestones, setMilestones] = useState({});
   const [chat, setChat] = useState([]);
+  const [weekly, setWeekly] = useState({});
+  const [evals, setEvals] = useState([]);
+  const [evalSummary, setEvalSummary] = useState(null);
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [loaded, setLoaded] = useState(false);
 
@@ -284,6 +288,9 @@ export default function App() {
     setAssessment(await store.get("ndt:assessment", null));
     setMilestones(await store.get("ndt:milestones", {}));
     setChat(await store.get("ndt:chat", []));
+    setWeekly(await store.get("ndt:weekly", {}));
+    setEvals(await store.get("ndt:evals", []));
+    setEvalSummary(await store.get("ndt:evalsummary", null));
     setLoaded(true);
   })(); }, []);
 
@@ -314,6 +321,9 @@ export default function App() {
   const saveAssessment = (a) => { setAssessment(a); store.set("ndt:assessment", a); };
   const saveMilestones = (m) => { setMilestones(m); store.set("ndt:milestones", m); };
   const saveChat = (c) => { setChat(c); store.set("ndt:chat", c); };
+  const saveWeekly = (w) => { setWeekly(w); store.set("ndt:weekly", w); };
+  const saveEvals = (e) => { setEvals(e); store.set("ndt:evals", e); };
+  const saveEvalSummary = (v) => { setEvalSummary(v); store.set("ndt:evalsummary", v); };
 
   const addNote = async (n, imageDataUrl) => {
     const id = uid();
@@ -325,7 +335,7 @@ export default function App() {
   const exportAll = async () => {
     const images = {};
     for (const n of notes) if (n.source === "scan") { const img = await store.get(imgKey(n.id), null); if (img) images[n.id] = img; }
-    const payload = { app: "dev-tracker", version: 1, exportedAt: new Date().toISOString(), data: { notes, goals, recs, profile, assessment, milestones, chat }, images };
+    const payload = { app: "dev-tracker", version: 1, exportedAt: new Date().toISOString(), data: { notes, goals, recs, profile, assessment, milestones, chat, weekly, evals, evalSummary }, images };
     const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -346,6 +356,9 @@ export default function App() {
       saveAssessment(d.assessment || null);
       saveMilestones(d.milestones && typeof d.milestones === "object" ? d.milestones : {});
       saveChat(Array.isArray(d.chat) ? d.chat : []);
+      saveWeekly(d.weekly && typeof d.weekly === "object" ? d.weekly : {});
+      saveEvals(Array.isArray(d.evals) ? d.evals : []);
+      saveEvalSummary(d.evalSummary || null);
       if (p.images) for (const [id, img] of Object.entries(p.images)) await store.set(imgKey(id), img);
       return nn.length;
     } catch { return -1; }
@@ -368,19 +381,19 @@ export default function App() {
       <Header profile={profile} onSave={saveProfile} count={notes.length} onExport={exportAll} onImport={importAll} user={user} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <Nav tab={tab} setTab={setTab} />
-        <main className="pb-24 pt-6">
+        <main className="pb-36 sm:pb-24 pt-6">
           {tab === "dashboard" && <Dashboard notes={notes} goals={goals} setTab={setTab} onSample={() => saveNotes(sampleNotes())} onOpenDiscipline={(k) => { setNoteFilter({ disc: k, dom: "all" }); setTab("log"); }} />}
           {tab === "log" && <NotesLog notes={notes} goals={goals} setTab={setTab} filter={noteFilter} onFilter={setNoteFilter} onOpen={setViewNote} />}
           {tab === "add" && <AddNote goals={goals} onAdd={async (n, img) => { await addNote(n, img); setTab("log"); }} />}
           {tab === "goals" && <Goals goals={goals} notes={notes} onSave={saveGoals} />}
           {tab === "milestones" && <Milestones profile={profile} status={milestones} onSave={saveMilestones} />}
-          {tab === "assessment" && <Assessment notes={notes} profile={profile} saved={assessment} onSave={saveAssessment} />}
+          {tab === "assessment" && <Assessment notes={notes} profile={profile} saved={assessment} onSave={saveAssessment} weekly={weekly} onSaveWeekly={saveWeekly} evals={evals} onSaveEvals={saveEvals} evalSummary={evalSummary} onSaveEvalSummary={saveEvalSummary} />}
           {tab === "activities" && <Activities notes={notes} goals={goals} profile={profile} recs={recs} onSave={saveRecs} />}
           {tab === "ask" && <AskPanel notes={notes} profile={profile} chat={chat} onSave={saveChat} />}
         </main>
       </div>
       {exitHint && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full text-sm text-white shadow-lg" style={{ background: INK }}>Press back again to exit</div>}
-      {viewed && <NoteView note={viewed} goal={goals.find((g) => g.id === viewed.goalId)} onClose={() => setViewNote(null)} onDelete={deleteNote} />}
+      {viewed && <NoteView note={viewed} goal={goals.find((g) => g.id === viewed.goalId)} goals={goals} notes={notes} profile={profile} onClose={() => setViewNote(null)} onDelete={deleteNote} onUpdate={(id, patch) => saveNotes(notes.map((n) => n.id === id ? { ...n, ...patch } : n))} />}
     </div>
   );
 }
@@ -399,7 +412,7 @@ function Header({ profile, onSave, count, onExport, onImport, user }) {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl grid place-items-center text-white text-lg font-semibold shrink-0" style={{ background: ACCENT }}>{initial}</div>
         <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-xl sm:text-2xl leading-tight truncate">{profile.name ? `${profile.name}'s Progress` : "My Child's Progress"}</h1>
+          <h1 className="font-semibold tracking-tight text-xl sm:text-2xl leading-tight truncate">{profile.name ? `${profile.name}'s Progress` : "My Child's Progress"}</h1>
           <p className="text-xs sm:text-sm" style={{ color: SUB }}>{age ? `${age} · ` : ""}{count} note{count === 1 ? "" : "s"} across the care team</p>
         </div>
         <button onClick={() => setOpen((o) => !o)} className="text-sm px-3 py-1.5 rounded-lg tabbtn" style={{ color: ACCENT, border: `1px solid ${LINE}` }}>{profile.name ? "Edit" : "Set up"}</button>
@@ -440,17 +453,29 @@ function Nav({ tab, setTab }) {
     { k: "ask", label: "Ask", Icon: Bot },
   ];
   return (
-    <nav className="flex gap-1 sm:gap-2 mt-4 overflow-x-auto no-print">
-      {items.map(({ k, label, Icon }) => {
-        const active = tab === k;
-        return (
-          <button key={k} onClick={() => setTab(k)} className="tabbtn flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm whitespace-nowrap"
-            style={{ background: active ? INK : CARD, color: active ? "#fff" : SUB, border: `1px solid ${active ? INK : LINE}`, fontWeight: active ? 600 : 500 }}>
-            <Icon size={16} /> {label}
-          </button>
-        );
-      })}
-    </nav>
+    <>
+      <nav className="hidden sm:flex gap-2 mt-4 flex-wrap no-print">
+        {items.map(({ k, label, Icon }) => {
+          const active = tab === k;
+          return (
+            <button key={k} onClick={() => setTab(k)} className="tabbtn flex items-center gap-2 px-4 py-2 rounded-2xl text-sm whitespace-nowrap"
+              style={{ background: active ? ACCENT : CARD, color: active ? "#fff" : SUB, border: `1px solid ${active ? ACCENT : LINE}`, fontWeight: active ? 600 : 500 }}>
+              <Icon size={16} /> {label}
+            </button>
+          );
+        })}
+      </nav>
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 no-print flex overflow-x-auto" style={{ background: CARD, borderTop: `1px solid ${LINE}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
+        {items.map(({ k, label, Icon }) => {
+          const active = tab === k;
+          return (
+            <button key={k} onClick={() => setTab(k)} className="flex-1 min-w-[62px] flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10px] font-medium" style={{ color: active ? ACCENT : SUB }}>
+              <Icon size={20} strokeWidth={active ? 2.4 : 2} /> {label}
+            </button>
+          );
+        })}
+      </nav>
+    </>
   );
 }
 
@@ -467,13 +492,13 @@ function LevelPill({ v }) {
   return <span className="inline-flex items-center gap-1.5 text-[11px] font-medium" style={{ color: l.color }}><span className="w-2 h-2 rounded-full" style={{ background: l.color }} /> {l.label}</span>;
 }
 function Card({ children, className = "", style = {}, id }) {
-  return <div id={id} className={`rounded-2xl p-4 sm:p-5 ${className}`} style={{ background: CARD, border: `1px solid ${LINE}`, ...style }}>{children}</div>;
+  return <div id={id} className={`rounded-3xl p-4 sm:p-5 ${className}`} style={{ background: CARD, border: `1px solid ${LINE}`, ...style }}>{children}</div>;
 }
 function Empty({ title, body, children }) {
   return (
     <div className="text-center py-16 px-4">
       <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4" style={{ background: ACCENT + "14" }}><Inbox size={26} style={{ color: ACCENT }} /></div>
-      <h3 className="font-serif text-xl mb-1">{title}</h3>
+      <h3 className="font-semibold tracking-tight text-xl mb-1">{title}</h3>
       <p className="text-sm max-w-sm mx-auto mb-5" style={{ color: SUB }}>{body}</p>
       {children}
     </div>
@@ -541,7 +566,7 @@ function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
             <button key={k} onClick={() => onOpenDiscipline(k)} className="text-left">
               <Card className="!p-3 sm:!p-4 h-full">
                 <div className="flex items-center gap-2 mb-1.5"><span className="w-7 h-7 rounded-lg grid place-items-center" style={{ background: d.color + "18" }}><d.Icon size={15} style={{ color: d.color }} /></span><span className="text-xs" style={{ color: SUB }}>{d.short}</span></div>
-                <div className="text-2xl font-serif">{count}</div>
+                <div className="text-2xl font-semibold tracking-tight">{count}</div>
                 <div className="text-[11px]" style={{ color: SUB }}>session note{count === 1 ? "" : "s"}</div>
               </Card>
             </button>
@@ -550,7 +575,7 @@ function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
       </div>
 
       <Card>
-        <h2 className="font-serif text-lg mb-1 flex items-center gap-2"><Hexagon size={18} style={{ color: ACCENT }} /> Developmental profile</h2>
+        <h2 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><Hexagon size={18} style={{ color: ACCENT }} /> Developmental profile</h2>
         <p className="text-xs mb-2" style={{ color: SUB }}>Current level across all eight areas, at a glance (recent 3 notes each).</p>
         <div style={{ height: 300 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -568,7 +593,7 @@ function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
       {activeGoals.length > 0 && (
         <Card>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-serif text-lg flex items-center gap-2"><Flag size={18} style={{ color: ACCENT }} /> Active goals</h2>
+            <h2 className="font-semibold tracking-tight text-lg flex items-center gap-2"><Flag size={18} style={{ color: ACCENT }} /> Active goals</h2>
             <button onClick={() => setTab("goals")} className="text-xs flex items-center gap-1" style={{ color: ACCENT }}>Manage <ChevronRight size={13} /></button>
           </div>
           <div className="space-y-3">
@@ -587,7 +612,7 @@ function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
       )}
 
       <Card>
-        <h2 className="font-serif text-lg mb-1 flex items-center gap-2"><TrendingUp size={18} style={{ color: ACCENT }} /> Overall progress trend</h2>
+        <h2 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><TrendingUp size={18} style={{ color: ACCENT }} /> Overall progress trend</h2>
         <p className="text-xs mb-3" style={{ color: SUB }}>Average progress level across all sessions, month by month.</p>
         <div style={{ height: 210 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -603,7 +628,7 @@ function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
       </Card>
 
       <Card>
-        <h2 className="font-serif text-lg mb-1">Where things stand, by area</h2>
+        <h2 className="font-semibold tracking-tight text-lg mb-1">Where things stand, by area</h2>
         <p className="text-xs mb-4" style={{ color: SUB }}>Average of the 3 most recent notes in each area.</p>
         <div className="space-y-3">
           {byDomain.map((r) => {
@@ -653,10 +678,11 @@ function NotesLog({ notes, goals, setTab, filter, onFilter, onOpen }) {
                   <Chip discipline={n.discipline} />
                   <span className="text-xs" style={{ color: SUB }}>{n.therapist || "—"} · {fmtDate(n.date)}</span>
                   {n.source === "scan" && <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SUB }}><Camera size={12} /> scanned</span>}
+                  {n.editedAt && <span className="text-[11px]" style={{ color: SUB }}>· edited</span>}
                   <ChevronRight size={14} className="ml-auto shrink-0" style={{ color: SUB }} />
                 </div>
                 <div className="text-sm font-medium mb-0.5">{n.domain}{n.skill ? ` — ${n.skill}` : ""}</div>
-                <p className="text-sm leading-relaxed" style={{ color: "#3C4B50" }}>{n.content}</p>
+                <p className="text-sm leading-relaxed" style={{ color: "#3E5450" }}>{n.content}</p>
                 <div className="mt-2 flex items-center gap-3 flex-wrap">
                   <LevelPill v={n.progress} />
                   {goal && <span className="text-[11px] inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={11} /> {goal.name}</span>}
@@ -785,7 +811,7 @@ function ScanIntake({ goals, onSubmit }) {
   return (
     <Card className="text-center py-10">
       <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4" style={{ background: ACCENT + "14" }}><Camera size={26} style={{ color: ACCENT }} /></div>
-      <h3 className="font-serif text-lg mb-1">Scan the teacher's note</h3>
+      <h3 className="font-semibold tracking-tight text-lg mb-1">Scan the teacher's note</h3>
       <p className="text-sm max-w-xs mx-auto mb-5" style={{ color: SUB }}>Take a photo or upload a scan. It reads the note and fills in the fields for you to confirm.</p>
       {err && <p className="text-sm mb-4" style={{ color: "#C0492E" }}>{err}</p>}
       <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
@@ -819,7 +845,7 @@ function Goals({ goals, notes, onSave }) {
         <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="font-serif text-xl">{detail.name}</h2>
+              <h2 className="font-semibold tracking-tight text-xl">{detail.name}</h2>
               <p className="text-xs mt-0.5" style={{ color: SUB }}>{detail.domain} · target {levelInfo(detail.target).label}</p>
               <p className="text-xs mt-1 font-medium" style={{ color: current == null ? SUB : current >= detail.target ? "#4E8A3E" : ACCENT }}>{current == null ? "No linked notes yet" : current >= detail.target ? "Target reached" : `${detail.target - current} level${detail.target - current > 1 ? "s" : ""} to target`}</p>
             </div>
@@ -847,7 +873,7 @@ function Goals({ goals, notes, onSave }) {
           <p className="text-xs font-medium mb-2 px-1" style={{ color: SUB }}>Linked notes ({linked.length})</p>
           <div className="space-y-2">
             {linked.slice().reverse().map((n) => (
-              <Card key={n.id} className="!p-3"><div className="flex justify-between items-center mb-1"><Chip discipline={n.discipline} /><span className="text-xs" style={{ color: SUB }}>{fmtDate(n.date)}</span></div><p className="text-sm" style={{ color: "#3C4B50" }}>{n.content}</p><div className="mt-1.5"><LevelPill v={n.progress} /></div></Card>
+              <Card key={n.id} className="!p-3"><div className="flex justify-between items-center mb-1"><Chip discipline={n.discipline} /><span className="text-xs" style={{ color: SUB }}>{fmtDate(n.date)}</span></div><p className="text-sm" style={{ color: "#3E5450" }}>{n.content}</p><div className="mt-1.5"><LevelPill v={n.progress} /></div></Card>
             ))}
             {linked.length === 0 && <p className="text-sm px-1" style={{ color: SUB }}>Link notes to this goal when adding them.</p>}
           </div>
@@ -862,7 +888,7 @@ function Goals({ goals, notes, onSave }) {
         ? <button onClick={() => setCreating(true)} className="w-full py-3 rounded-xl text-white font-medium flex items-center justify-center gap-2" style={{ background: ACCENT }}><Plus size={17} /> New goal</button>
         : (
           <Card>
-            <h3 className="font-serif text-lg mb-3">New goal</h3>
+            <h3 className="font-semibold tracking-tight text-lg mb-3">New goal</h3>
             <Field label="Goal name"><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Uses 2-word phrases" className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} /></Field>
             <Field label="Area" className="mt-3"><select value={draft.domain} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>{DOMAINS.map((d) => <option key={d}>{d}</option>)}</select></Field>
             <div className="mt-3"><span className="block text-xs mb-2 font-medium" style={{ color: SUB }}>Target level</span><div className="flex flex-wrap gap-2">{LEVELS.map((l) => { const on = draft.target === l.v; return <button key={l.v} onClick={() => setDraft({ ...draft, target: l.v })} className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: on ? l.color : CARD, color: on ? "#fff" : l.color, border: `1px solid ${on ? l.color : LINE}` }}>{l.label}</button>; })}</div></div>
@@ -923,11 +949,11 @@ function Milestones({ profile, status, onSave }) {
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#F0F7F5,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Baby size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
-            <h2 className="font-serif text-lg">Developmental reference</h2>
+            <h2 className="font-semibold tracking-tight text-lg">Developmental reference</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>What most children do by a given age — a starting point for conversations with your team, not a pass/fail test or a diagnosis. Every child's path differs, and autistic children often reach these on their own timeline and in their own order.</p>
           </div>
         </div>
@@ -974,13 +1000,13 @@ function MsChecklist({ band, status, onSave, sel }) {
         if (!items.length) return null;
         return (
           <Card key={ck}>
-            <h3 className="font-serif text-base mb-3">{cname}</h3>
+            <h3 className="font-semibold tracking-tight text-base mb-3">{cname}</h3>
             <div className="space-y-3">
               {items.map((t, i) => {
                 const key = ck + i, val = cur[key];
                 return (
                   <div key={key} className="flex items-start gap-3">
-                    <p className="text-sm flex-1 leading-relaxed" style={{ color: "#3C4B50" }}>{t}</p>
+                    <p className="text-sm flex-1 leading-relaxed" style={{ color: "#3E5450" }}>{t}</p>
                     <div className="flex gap-1 shrink-0">
                       <button onClick={() => setItem(key, "yes")} className="w-8 h-8 rounded-lg grid place-items-center" style={{ background: val === "yes" ? "#6FB05A" : CARD, color: val === "yes" ? "#fff" : "#6FB05A", border: `1px solid ${val === "yes" ? "#6FB05A" : LINE}` }} title="Reached" aria-label="Reached"><Check size={15} /></button>
                       <button onClick={() => setItem(key, "notyet")} className="px-2 h-8 rounded-lg text-[11px] font-medium" style={{ background: val === "notyet" ? "#E8843C" : CARD, color: val === "notyet" ? "#fff" : "#C0785A", border: `1px solid ${val === "notyet" ? "#E8843C" : LINE}` }}>Not yet</button>
@@ -1004,9 +1030,9 @@ function MsGuide({ band }) {
       <Card className="!p-3"><p className="text-xs" style={{ color: SUB }}>A general description of what's common at this stage — not a checklist and not a screening tool.</p></Card>
       {sections.map(([sk, sname]) => (
         <Card key={sk}>
-          <h3 className="font-serif text-base mb-3">{sname}</h3>
+          <h3 className="font-semibold tracking-tight text-base mb-3">{sname}</h3>
           <ul className="space-y-2">
-            {(g[sk] || []).map((t, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3C4B50" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />{t}</li>)}
+            {(g[sk] || []).map((t, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />{t}</li>)}
           </ul>
         </Card>
       ))}
@@ -1022,9 +1048,18 @@ function digest(notes) {
   DISC_KEYS.forEach((k) => { if (!byDisc[k]) return; out += `\n## ${k}\n`; byDisc[k].forEach((n) => { out += `- ${n.date} | ${n.domain}${n.skill ? " / " + n.skill : ""} | level ${n.progress}/5 (${levelInfo(n.progress).label}): ${n.content}\n`; }); });
   return out.trim();
 }
-function Assessment({ notes, profile, saved, onSave }) {
+function Assessment({ notes, profile, saved, onSave, weekly, onSaveWeekly, evals, onSaveEvals, evalSummary, onSaveEvalSummary }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const weeks = useMemo(() => {
+    if (!notes.length) return [];
+    const map = {};
+    notes.forEach((n) => { const w = weekStart(n.date); (map[w] = map[w] || []).push(n); });
+    const keys = Object.keys(map).sort();
+    const first = keys[0];
+    const num = (w) => Math.round((new Date(w) - new Date(first)) / (7 * 86400000)) + 1;
+    return keys.reverse().map((w) => ({ key: w, no: num(w), notes: map[w] }));
+  }, [notes]);
   const generate = async () => {
     setLoading(true); setError("");
     const age = ageFrom(profile.dob);
@@ -1043,11 +1078,11 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
   if (notes.length === 0) return <Empty title="Add a few notes first" body="Once there are notes to read, this writes a plain-language summary across your whole care team." />;
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#F0F7F5,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Sparkles size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
-            <h2 className="font-serif text-lg">Developmental summary</h2>
+            <h2 className="font-semibold tracking-tight text-lg">Developmental summary</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>Reads all {notes.length} notes and pulls together the trends, wins, and good questions for your next team meeting. A summary of what's documented — it supports your therapists' judgment, not replaces it.</p>
             <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Reading the notes…</> : <><Sparkles size={16} /> {saved ? "Regenerate" : "Generate summary"}</>}</button>
             {error && <p className="text-sm mt-2" style={{ color: "#C0492E" }}>{error}</p>}
@@ -1057,11 +1092,21 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
       {saved && <>
         <Card><p className="text-[15px] leading-relaxed">{saved.overallSummary}</p><p className="text-[11px] mt-3" style={{ color: SUB }}>Generated {new Date(saved.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · from {saved.noteCount} notes</p></Card>
         {Array.isArray(saved.domainHighlights) && saved.domainHighlights.length > 0 && (
-          <Card><h3 className="font-serif text-base mb-3 flex items-center gap-2"><ClipboardList size={16} style={{ color: ACCENT }} /> By area</h3><div className="space-y-2.5">{saved.domainHighlights.map((d, i) => <div key={i} className="flex gap-3"><TrendDot trend={d.trend} /><div><div className="text-sm font-medium">{d.domain} <span className="text-xs font-normal" style={{ color: SUB }}>· {d.trend}</span></div><div className="text-sm" style={{ color: "#3C4B50" }}>{d.note}</div></div></div>)}</div></Card>
+          <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><ClipboardList size={16} style={{ color: ACCENT }} /> By area</h3><div className="space-y-2.5">{saved.domainHighlights.map((d, i) => <div key={i} className="flex gap-3"><TrendDot trend={d.trend} /><div><div className="text-sm font-medium">{d.domain} <span className="text-xs font-normal" style={{ color: SUB }}>· {d.trend}</span></div><div className="text-sm" style={{ color: "#3E5450" }}>{d.note}</div></div></div>)}</div></Card>
         )}
         <div className="grid sm:grid-cols-2 gap-4"><ListCard title="Recent wins" Icon={Award} color="#6FB05A" items={saved.wins} /><ListCard title="Keep working on" Icon={Target} color="#E8843C" items={saved.focusAreas} /></div>
         <ListCard title="Questions for your next team meeting" Icon={HelpCircle} color={ACCENT} items={saved.questionsForTeam} />
       </>}
+      {weeks.length > 0 && (
+        <div className="pt-2">
+          <h3 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><ClipboardList size={17} style={{ color: ACCENT }} /> Week by week</h3>
+          <p className="text-xs mb-3" style={{ color: SUB }}>A short assessment of each week, from that week's notes only.</p>
+          <div className="space-y-3">
+            {weeks.map((w) => <WeekCard key={w.key} w={w} data={weekly[w.key]} profile={profile} onSave={(v) => onSaveWeekly({ ...weekly, [w.key]: v })} />)}
+          </div>
+        </div>
+      )}
+      <FormalScores evals={evals} onSave={onSaveEvals} summary={evalSummary} onSaveSummary={onSaveEvalSummary} profile={profile} />
     </div>
   );
 }
@@ -1071,7 +1116,7 @@ function TrendDot({ trend }) {
 }
 function ListCard({ title, Icon, color, items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
-  return <Card><h3 className="font-serif text-base mb-3 flex items-center gap-2"><Icon size={16} style={{ color }} /> {title}</h3><ul className="space-y-2">{items.map((it, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3C4B50" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} /><span>{it}</span></li>)}</ul></Card>;
+  return <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><Icon size={16} style={{ color }} /> {title}</h3><ul className="space-y-2">{items.map((it, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} /><span>{it}</span></li>)}</ul></Card>;
 }
 
 /* ---------- activities / recommendations ---------- */
@@ -1116,11 +1161,11 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#F0F7F5,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Target size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
-            <h2 className="font-serif text-lg">Activity suggestions</h2>
+            <h2 className="font-semibold tracking-tight text-lg">Activity suggestions</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>Play-based ideas for home and school, built from the latest progress. Mark what you try — feedback shapes the next round. Ideas to try and discuss with your care team, not medical advice.</p>
             <button onClick={generate} disabled={loading} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: ACCENT }}>{loading ? <><Loader2 size={16} className="animate-spin" /> Thinking of ideas…</> : <><Sparkles size={16} /> {recs.length ? "Refresh suggestions" : "Generate suggestions"}</>}</button>
             {error && <p className="text-sm mt-2" style={{ color: "#C0492E" }}>{error}</p>}
@@ -1130,7 +1175,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
 
       {home.length > 0 && (
         <div>
-          <h3 className="font-serif text-lg mb-2 flex items-center gap-2"><Home size={17} style={{ color: ACCENT }} /> At home</h3>
+          <h3 className="font-semibold tracking-tight text-lg mb-2 flex items-center gap-2"><Home size={17} style={{ color: ACCENT }} /> At home</h3>
           <div className="space-y-3">{home.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} />)}</div>
         </div>
       )}
@@ -1138,7 +1183,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
       {school.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-serif text-lg flex items-center gap-2"><GraduationCap size={17} style={{ color: ACCENT }} /> For school</h3>
+            <h3 className="font-semibold tracking-tight text-lg flex items-center gap-2"><GraduationCap size={17} style={{ color: ACCENT }} /> For school</h3>
             <button onClick={() => setHandout(true)} className="text-sm inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Share2 size={14} /> Handout</button>
           </div>
           <div className="space-y-3">{school.map((r) => <RecCard key={r.id} r={r} onStatus={setStatus} />)}</div>
@@ -1158,7 +1203,7 @@ function RecCard({ r, onStatus }) {
         <h4 className="font-medium text-[15px]">{r.title}</h4>
         <span className="text-[11px] px-2 py-0.5 rounded-full shrink-0" style={{ background: st.color + "18", color: st.color }}>{st.label}</span>
       </div>
-      <p className="text-sm leading-relaxed mb-2" style={{ color: "#3C4B50" }}>{r.activity}</p>
+      <p className="text-sm leading-relaxed mb-2" style={{ color: "#3E5450" }}>{r.activity}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] mb-3" style={{ color: SUB }}>
         {r.targetSkill && <span className="inline-flex items-center gap-1"><Target size={11} /> {r.targetSkill}</span>}
         {r.why && <span className="italic">{r.why}</span>}
@@ -1198,7 +1243,7 @@ function Handout({ profile, notes, school, onClose }) {
   const doCopy = async () => { if (await copyText(text)) { setCopied(true); setTimeout(() => setCopied(false), 1800); } };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(23,49,58,0.45)" }}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(19,46,50,0.45)" }}>
       <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-auto">
         <div className="no-print sticky top-0 flex items-center justify-between px-4 py-3" style={{ background: CARD, borderBottom: `1px solid ${LINE}` }}>
           <span className="font-medium">Teacher handout</span>
@@ -1206,20 +1251,20 @@ function Handout({ profile, notes, school, onClose }) {
         </div>
 
         <div id="handout" className="p-5">
-          <h1 className="font-serif text-xl">Home-School Support Ideas</h1>
+          <h1 className="font-semibold tracking-tight text-xl">Home-School Support Ideas</h1>
           <p className="text-sm mt-0.5" style={{ color: SUB }}>{profile.name || "Child"}{age ? ` · ${age}` : ""} · {fmtDate(todayStr())}</p>
 
-          <h2 className="font-serif text-base mt-5 mb-2">Recent progress snapshot</h2>
+          <h2 className="font-semibold tracking-tight text-base mt-5 mb-2">Recent progress snapshot</h2>
           <div className="space-y-1.5">
             {snapshot.map((s) => <div key={s.domain} className="flex justify-between text-sm"><span>{s.domain}</span><span style={{ color: levelInfo(Math.round(s.avg)).color }}>{levelInfo(Math.round(s.avg)).label}</span></div>)}
           </div>
 
-          <h2 className="font-serif text-base mt-5 mb-2">Suggested classroom / therapy activities</h2>
+          <h2 className="font-semibold tracking-tight text-base mt-5 mb-2">Suggested classroom / therapy activities</h2>
           <ol className="space-y-3">
             {school.map((r, i) => (
               <li key={r.id} className="text-sm">
                 <span className="font-medium">{i + 1}. {r.title}</span>
-                <p className="mt-0.5" style={{ color: "#3C4B50" }}>{r.activity}</p>
+                <p className="mt-0.5" style={{ color: "#3E5450" }}>{r.activity}</p>
                 {r.targetSkill && <p className="text-xs mt-0.5" style={{ color: SUB }}>Targets: {r.targetSkill}</p>}
               </li>
             ))}
@@ -1279,11 +1324,11 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#F0F7F5,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Bot size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
-            <h2 className="font-serif text-lg">Ask the panel</h2>
+            <h2 className="font-semibold tracking-tight text-lg">Ask the panel</h2>
             <p className="text-sm mt-0.5" style={{ color: SUB }}>Answers drawing on developmental pediatrics, speech, OT, ABA, and SPED perspectives — grounded in your child's notes. Information and ideas, not medical advice; clinical decisions stay with your real care team.</p>
           </div>
           {chat.length > 0 && <button onClick={() => { if (window.confirm("Clear this conversation?")) onSave([]); }} className="text-xs shrink-0" style={{ color: SUB }}>Clear</button>}
@@ -1299,7 +1344,7 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
       <div className="space-y-3">
         {chat.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={m.role === "user" ? { background: ACCENT, color: "#fff" } : { background: CARD, border: `1px solid ${LINE}`, color: "#3C4B50" }}>{m.text}</div>
+            <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={m.role === "user" ? { background: ACCENT, color: "#fff" } : { background: CARD, border: `1px solid ${LINE}`, color: "#3E5450" }}>{m.text}</div>
           </div>
         ))}
         {busy && <div className="flex justify-start"><div className="rounded-2xl px-4 py-2.5" style={{ background: CARD, border: `1px solid ${LINE}` }}><Loader2 size={16} className="animate-spin" style={{ color: ACCENT }} /></div></div>}
@@ -1322,7 +1367,7 @@ function Login() {
     <div style={{ background: PAPER, color: INK }} className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">
         <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4 text-white text-xl font-semibold" style={{ background: ACCENT }}>D</div>
-        <h1 className="font-serif text-2xl mb-1">Development Tracker</h1>
+        <h1 className="font-semibold tracking-tight text-2xl mb-1">Development Tracker</h1>
         <p className="text-sm mb-6" style={{ color: SUB }}>A private space to follow your child's therapy progress — notes, goals, milestones, and guidance in one place.</p>
         <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
         <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to you. Signing in lets you use the same data on any device.</p>
@@ -1332,29 +1377,247 @@ function Login() {
 }
 
 /* ---------- read-only note view ---------- */
-function NoteView({ note, goal, onClose, onDelete }) {
+function NoteView({ note, goal, goals, notes, profile, onClose, onDelete, onUpdate }) {
   useBackClose(true, onClose);
+  const [mode, setMode] = useState("view");
+  useBackClose(mode === "edit", () => setMode("view"));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const runInsight = async () => {
+    setBusy(true); setErr("");
+    const age = ageFrom(profile.dob);
+    const history = notes
+      .filter((n) => n.id !== note.id && n.domain === note.domain && n.date <= note.date)
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
+      .map((n) => `- ${n.date} | ${n.discipline}${n.skill ? " / " + n.skill : ""} | level ${n.progress}/5: ${n.content}`).join("\n") || "(none)";
+    const prompt = `You are a warm developmental pediatrician helping a parent understand ONE therapy session note for ${profile.name || "their child"}${age ? ` (${age})` : ""}. In plain language: (1) what the provider observed, decoding any jargon; (2) what it may signal about progress, read against the earlier notes below — stay modest, one session is a small sample; (3) 2-3 specific questions the parent could ask this provider next time. No diagnosis, no medication advice. Under 180 words, plain text only.
+
+The note (${note.date}, ${note.discipline}${note.skill ? ", skill: " + note.skill : ""}, area: ${note.domain}, level ${note.progress}/5):
+"${note.content}"
+
+Earlier notes in the same area:
+${history}`;
+    try {
+      const text = await claudeText([{ type: "text", text: prompt }], 900);
+      onUpdate(note.id, { insight: { text, at: Date.now() } });
+    } catch { setErr("Couldn't generate just now — try again."); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="fixed inset-0 z-50 overflow-auto" style={{ background: PAPER }}>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between mb-4">
-          <button onClick={onClose} className="text-sm inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}>← Back</button>
-          <button onClick={() => { if (window.confirm("Delete this note? This can't be undone.")) { onDelete(note.id); onClose(); } }} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: "#C0492E", border: `1px solid ${LINE}`, background: CARD }}><Trash2 size={13} /> Delete</button>
+          <button onClick={() => (mode === "edit" ? setMode("view") : onClose())} className="text-sm inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}>← Back</button>
+          {mode === "view" && (
+            <div className="flex gap-2">
+              <button onClick={() => setMode("edit")} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}><Pencil size={13} /> Edit</button>
+              <button onClick={() => { if (window.confirm("Delete this note? This can't be undone.")) { onDelete(note.id); onClose(); } }} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: "#C0492E", border: `1px solid ${LINE}`, background: CARD }}><Trash2 size={13} /> Delete</button>
+            </div>
+          )}
         </div>
+        {mode === "edit" ? (
+          <>
+            <p className="text-xs mb-3 px-1" style={{ color: SUB }}>Fix anything that was misread or mistyped. Saving marks the note as edited{note.insight ? " and clears its AI insight (regenerate anytime)" : ""}.</p>
+            <NoteForm goals={goals} initial={{ date: note.date, discipline: note.discipline, therapist: note.therapist || "", domain: note.domain, skill: note.skill || "", content: note.content, progress: note.progress, goalId: note.goalId || "" }} onSubmit={(f) => { onUpdate(note.id, { ...f, editedAt: Date.now(), insight: undefined }); setMode("view"); }} />
+          </>
+        ) : (<>
         <Card>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <Chip discipline={note.discipline} />
             <span className="text-xs" style={{ color: SUB }}>{note.therapist || "—"} · {fmtDate(note.date)}</span>
             {note.source === "scan" && <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SUB }}><Camera size={12} /> scanned</span>}
+            {note.editedAt && <span className="text-[11px]" style={{ color: SUB }}>· edited</span>}
           </div>
-          <h2 className="font-serif text-xl mb-1.5">{note.domain}{note.skill ? ` — ${note.skill}` : ""}</h2>
+          <h2 className="font-semibold tracking-tight text-xl mb-1.5">{note.domain}{note.skill ? ` — ${note.skill}` : ""}</h2>
           <div className="mb-3"><LevelPill v={note.progress} /></div>
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: "#3C4B50" }}>{note.content}</p>
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{note.content}</p>
           {goal && <p className="text-xs mt-3 inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={12} /> Linked goal: {goal.name}</p>}
           {note.source === "scan" && <NoteImage noteId={note.id} />}
         </Card>
-        <p className="text-[11px] mt-3 px-1" style={{ color: SUB }}>Read-only view. To change a note, delete it and add a corrected one.</p>
+        <Card className="mt-4" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+          <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <h3 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={16} style={{ color: ACCENT }} /> AI insight</h3>
+            <button onClick={runInsight} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {note.insight ? "Regenerate" : "Assess this note"}</button>
+          </div>
+          {err && <p className="text-xs mb-1" style={{ color: "#C0492E" }}>{err}</p>}
+          {note.insight
+            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{note.insight.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(note.insight.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · an aid to understanding, not a clinical judgment</p></>
+            : <p className="text-xs" style={{ color: SUB }}>Explains this note in plain language, reads it against earlier notes in the same area, and suggests questions for the provider.</p>}
+        </Card>
+        <p className="text-[11px] mt-3 px-1" style={{ color: SUB }}>{note.editedAt ? `Edited ${new Date(note.editedAt).toLocaleDateString(undefined, { dateStyle: "medium" })} · ` : ""}Tap Edit to fix anything the scan or a typo got wrong.</p>
+        </>)}
       </div>
+    </div>
+  );
+}
+
+/* ---------- weekly assessment card ---------- */
+function WeekCard({ w, data, profile, onSave }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const end = new Date(w.key + "T00:00:00"); end.setDate(end.getDate() + 6);
+  const range = `${fmtDate(w.key)} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const gen = async () => {
+    setBusy(true); setErr("");
+    const age = ageFrom(profile.dob);
+    const prompt = `You are a developmental pediatrician writing a very short weekly progress check-in for a parent, based ONLY on this week's therapy notes for ${profile.name || "the child"}${age ? ` (${age})` : ""}. Do not diagnose or invent facts; one week is a small sample, so keep conclusions modest.
+
+This week's notes:
+${digest(w.notes)}
+
+Return ONLY valid JSON: {"summary":"2-3 plain sentences on how the week went","wins":["up to 3 short wins"],"focus":["up to 2 things to keep an eye on"]}`;
+    try {
+      const r = await claudeJSON([{ type: "text", text: prompt }], 900);
+      onSave({ ...r, generatedAt: new Date().toISOString(), count: w.notes.length });
+    } catch { setErr("Couldn't generate just now — try again."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Card className="!p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <div><span className="font-medium text-sm">Week {w.no}</span> <span className="text-xs" style={{ color: SUB }}>· {range} · {w.notes.length} note{w.notes.length === 1 ? "" : "s"}</span></div>
+        <button onClick={gen} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {data ? "Regenerate" : "Assess week"}</button>
+      </div>
+      {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
+      {data && (
+        <div className="mt-1">
+          <p className="text-sm leading-relaxed" style={{ color: "#3E5450" }}>{data.summary}</p>
+          {Array.isArray(data.wins) && data.wins.length > 0 && <p className="text-xs mt-2" style={{ color: "#3B6D11" }}>Wins: {data.wins.join(" · ")}</p>}
+          {Array.isArray(data.focus) && data.focus.length > 0 && <p className="text-xs mt-1" style={{ color: "#854F0B" }}>Watch: {data.focus.join(" · ")}</p>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ---------- formal assessment scores ---------- */
+const EVAL_TOOLS = ["VB-MAPP", "ABLLS-R", "Vineland-3", "CARS-2", "PEP-3", "Other"];
+function FormalScores({ evals, onSave, summary, onSaveSummary, profile }) {
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const blank = { tool: EVAL_TOOLS[0], custom: "", date: todayStr(), rows: [{ label: "Overall", value: "" }], notes: "" };
+  const [draft, setDraft] = useState(blank);
+  const setD = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  const setRow = (i, k, v) => setD("rows", draft.rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+
+  const save = () => {
+    const tool = draft.tool === "Other" ? (draft.custom.trim() || "Other") : draft.tool;
+    const rows = draft.rows.filter((r) => r.label.trim() && r.value !== "" && !isNaN(Number(r.value)));
+    if (!rows.length) return;
+    onSave([{ id: uid(), tool, date: draft.date, scores: rows.map((r) => ({ label: r.label.trim(), value: Number(r.value) })), notes: draft.notes.trim() }, ...evals]);
+    setDraft(blank); setAdding(false);
+  };
+  const remove = (id) => { if (window.confirm("Delete this result?")) onSave(evals.filter((e) => e.id !== id)); };
+
+  const byTool = useMemo(() => {
+    const m = {};
+    evals.forEach((e) => (m[e.tool] = m[e.tool] || []).push(e));
+    Object.values(m).forEach((l) => l.sort((a, b) => a.date.localeCompare(b.date)));
+    return m;
+  }, [evals]);
+
+  const genSummary = async () => {
+    setBusy(true); setErr("");
+    const age = ageFrom(profile.dob);
+    const lines = evals.slice().sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => `- ${e.date} | ${e.tool} | ${e.scores.map((sc) => `${sc.label}: ${sc.value}`).join(", ")}${e.notes ? ` | note: ${e.notes}` : ""}`).join("\n");
+    const prompt = `You are a developmental pediatrician helping a parent understand their child's formal assessment results. These tools were administered and scored by qualified professionals; the parent logged the numbers to track them over time. Child: ${profile.name || "the child"}${age ? ` (${age})` : ""}.
+
+Logged results:
+${lines}
+
+In plain language: (1) briefly say what each tool measures; (2) describe the trend where a tool was repeated; (3) suggest 2-3 questions for the professional who administered them. Raw numbers without the clinician's full report lack context — do not interpret against norms and do not diagnose; frame this as preparation for a conversation with the team. Under 220 words, plain text only.`;
+    try { onSaveSummary({ text: await claudeText([{ type: "text", text: prompt }], 900), generatedAt: new Date().toISOString() }); }
+    catch { setErr("Couldn't generate just now — try again."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="pt-2">
+      <h3 className="font-semibold tracking-tight text-lg mb-1 flex items-center gap-2"><Award size={17} style={{ color: ACCENT }} /> Formal assessment scores</h3>
+      <p className="text-xs mb-3" style={{ color: SUB }}>When your team administers a standardized tool (VB-MAPP, Vineland…), log the results here to trend them over time. The scores come from the professionals — this tracks and explains them.</p>
+
+      {!adding
+        ? <button onClick={() => setAdding(true)} className="w-full py-2.5 rounded-2xl text-sm font-medium mb-3" style={{ color: ACCENT, border: `1px dashed ${ACCENT}`, background: CARD }}>+ Log a result</button>
+        : (
+          <Card className="mb-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Assessment tool"><select value={draft.tool} onChange={(e) => setD("tool", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>{EVAL_TOOLS.map((t) => <option key={t}>{t}</option>)}</select></Field>
+              <Field label="Date administered"><input type="date" value={draft.date} onChange={(e) => setD("date", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} /></Field>
+            </div>
+            {draft.tool === "Other" && <Field label="Tool name" className="mt-3"><input value={draft.custom} onChange={(e) => setD("custom", e.target.value)} placeholder="e.g. M-CHAT-R" className="w-full px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} /></Field>}
+            <div className="mt-3">
+              <span className="block text-xs mb-1 font-medium" style={{ color: SUB }}>Scores (from the professional's report)</span>
+              {draft.rows.map((r, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+                  <input value={r.label} onChange={(e) => setRow(i, "label", e.target.value)} placeholder="e.g. Overall, Mand, Communication" className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} />
+                  <input value={r.value} onChange={(e) => setRow(i, "value", e.target.value)} placeholder="Score" inputMode="decimal" className="w-24 px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD }} />
+                  {draft.rows.length > 1 && <button onClick={() => setD("rows", draft.rows.filter((_, j) => j !== i))} className="px-2" style={{ color: SUB }} aria-label="Remove row"><X size={14} /></button>}
+                </div>
+              ))}
+              <button onClick={() => setD("rows", [...draft.rows, { label: "", value: "" }])} className="text-xs font-medium" style={{ color: ACCENT }}>+ Add score row</button>
+            </div>
+            <Field label="Notes from the report (optional)" className="mt-3"><textarea value={draft.notes} onChange={(e) => setD("notes", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm resize-y" style={{ border: `1px solid ${LINE}`, background: CARD }} /></Field>
+            <div className="flex gap-2 mt-4">
+              <button onClick={save} className="flex-1 py-2.5 rounded-2xl text-white text-sm font-medium" style={{ background: ACCENT }}>Save result</button>
+              <button onClick={() => setAdding(false)} className="px-4 py-2.5 rounded-2xl text-sm" style={{ color: SUB, border: `1px solid ${LINE}` }}>Cancel</button>
+            </div>
+          </Card>
+        )}
+
+      <div className="space-y-3">
+        {Object.entries(byTool).map(([tool, list]) => {
+          const chartLabel = list[list.length - 1].scores[0]?.label;
+          const data = list.map((e) => ({ date: fmtDate(e.date), value: (e.scores.find((x) => x.label === chartLabel) || e.scores[0] || {}).value }));
+          return (
+            <Card key={tool} className="!p-4">
+              <div className="font-medium text-sm mb-1">{tool}</div>
+              {list.length > 1 && (
+                <div className="mb-2">
+                  <div style={{ height: 150 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data} margin={{ top: 6, right: 8, left: -14, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={LINE} vertical={false} />
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: SUB }} axisLine={{ stroke: LINE }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: SUB }} axisLine={false} tickLine={false} width={42} />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${LINE}`, fontSize: 12 }} />
+                        <Line type="monotone" dataKey="value" stroke={ACCENT} strokeWidth={2} dot={{ r: 3, fill: ACCENT }} name={chartLabel} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px]" style={{ color: SUB }}>Trend of "{chartLabel}"</p>
+                </div>
+              )}
+              <div className="space-y-2 mt-2">
+                {list.slice().reverse().map((e) => (
+                  <div key={e.id} className="flex items-start justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="text-xs" style={{ color: SUB }}>{fmtDate(e.date)}</span>
+                      <div className="flex flex-wrap gap-1.5 mt-0.5">{e.scores.map((sc, i) => <span key={i} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: ACCENT + "14", color: ACCENT }}>{sc.label}: {sc.value}</span>)}</div>
+                      {e.notes && <p className="text-xs mt-1" style={{ color: "#3E5450" }}>{e.notes}</p>}
+                    </div>
+                    <button onClick={() => remove(e.id)} className="p-1 shrink-0" style={{ color: SUB }} aria-label="Delete result"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {evals.length > 0 && (
+        <Card className="mt-3" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+          <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <h4 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={15} style={{ color: ACCENT }} /> AI reading of the scores</h4>
+            <button onClick={genSummary} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {summary ? "Regenerate" : "Explain my results"}</button>
+          </div>
+          {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
+          {summary
+            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{summary.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(summary.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · numbers without the clinician's report lack context — bring the questions to your team</p></>
+            : <p className="text-xs" style={{ color: SUB }}>Explains what each tool measures, the trend across repeat administrations, and questions for the professional who scored them.</p>}
+        </Card>
+      )}
     </div>
   );
 }
