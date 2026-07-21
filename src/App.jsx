@@ -244,9 +244,22 @@ function sampleNotes() {
   }));
 }
 
+/* ---------- back-button handling ---------- */
+const backStack = [];
+function useBackClose(active, close) {
+  useEffect(() => {
+    if (!active) return;
+    backStack.push(close);
+    return () => { const i = backStack.lastIndexOf(close); if (i >= 0) backStack.splice(i, 1); };
+  }, [active]);
+}
+
 /* ================================================================= */
 export default function App() {
   const [tab, setTab] = useState("dashboard");
+  const [noteFilter, setNoteFilter] = useState({ disc: "all", dom: "all" });
+  const [viewNote, setViewNote] = useState(null);
+  const [exitHint, setExitHint] = useState(false);
   const [notes, setNotes] = useState([]);
   const [goals, setGoals] = useState([]);
   const [recs, setRecs] = useState([]);
@@ -273,6 +286,26 @@ export default function App() {
     setChat(await store.get("ndt:chat", []));
     setLoaded(true);
   })(); }, []);
+
+  const tabRef = useRef(tab); tabRef.current = tab;
+  const userRef = useRef(user); userRef.current = user;
+  const exitAtRef = useRef(0);
+
+  useEffect(() => {
+    history.pushState({ ndt: 1 }, "");
+    const onPop = () => {
+      if (backStack.length) { backStack[backStack.length - 1](); history.pushState({ ndt: 1 }, ""); return; }
+      if (!userRef.current) { history.back(); return; }
+      if (tabRef.current !== "dashboard") { setTab("dashboard"); history.pushState({ ndt: 1 }, ""); return; }
+      const now = Date.now();
+      if (now - exitAtRef.current < 2000) { history.back(); return; }
+      exitAtRef.current = now;
+      setExitHint(true); setTimeout(() => setExitHint(false), 2000);
+      history.pushState({ ndt: 1 }, "");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const saveNotes = (n) => { setNotes(n); store.set("ndt:notes", n); };
   const saveGoals = (g) => { setGoals(g); store.set("ndt:goals", g); };
@@ -318,6 +351,8 @@ export default function App() {
     } catch { return -1; }
   };
 
+  const viewed = viewNote ? notes.find((n) => n.id === viewNote) : null;
+
   if (user === null) return <Login />;
   if (!loaded)
     return <div style={{ background: PAPER }} className="min-h-screen grid place-items-center"><Loader2 className="animate-spin" style={{ color: ACCENT }} size={28} /></div>;
@@ -334,8 +369,8 @@ export default function App() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <Nav tab={tab} setTab={setTab} />
         <main className="pb-24 pt-6">
-          {tab === "dashboard" && <Dashboard notes={notes} goals={goals} setTab={setTab} onSample={() => saveNotes(sampleNotes())} />}
-          {tab === "log" && <NotesLog notes={notes} goals={goals} onDelete={deleteNote} setTab={setTab} />}
+          {tab === "dashboard" && <Dashboard notes={notes} goals={goals} setTab={setTab} onSample={() => saveNotes(sampleNotes())} onOpenDiscipline={(k) => { setNoteFilter({ disc: k, dom: "all" }); setTab("log"); }} />}
+          {tab === "log" && <NotesLog notes={notes} goals={goals} setTab={setTab} filter={noteFilter} onFilter={setNoteFilter} onOpen={setViewNote} />}
           {tab === "add" && <AddNote goals={goals} onAdd={async (n, img) => { await addNote(n, img); setTab("log"); }} />}
           {tab === "goals" && <Goals goals={goals} notes={notes} onSave={saveGoals} />}
           {tab === "milestones" && <Milestones profile={profile} status={milestones} onSave={saveMilestones} />}
@@ -344,6 +379,8 @@ export default function App() {
           {tab === "ask" && <AskPanel notes={notes} profile={profile} chat={chat} onSave={saveChat} />}
         </main>
       </div>
+      {exitHint && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full text-sm text-white shadow-lg" style={{ background: INK }}>Press back again to exit</div>}
+      {viewed && <NoteView note={viewed} goal={goals.find((g) => g.id === viewed.goalId)} onClose={() => setViewNote(null)} onDelete={deleteNote} />}
     </div>
   );
 }
@@ -457,7 +494,7 @@ function goalStats(goal, notes) {
 }
 
 /* ---------- dashboard ---------- */
-function Dashboard({ notes, goals, setTab, onSample }) {
+function Dashboard({ notes, goals, setTab, onSample, onOpenDiscipline }) {
   if (notes.length === 0)
     return (
       <Empty title="Start your child's record" body="Add notes from each session — type them or scan the teacher's copy — and the picture builds itself.">
@@ -501,11 +538,13 @@ function Dashboard({ notes, goals, setTab, onSample }) {
         {perDisc.map(({ k, count }) => {
           const d = DISCIPLINES[k];
           return (
-            <Card key={k} className="!p-3 sm:!p-4">
-              <div className="flex items-center gap-2 mb-1.5"><span className="w-7 h-7 rounded-lg grid place-items-center" style={{ background: d.color + "18" }}><d.Icon size={15} style={{ color: d.color }} /></span><span className="text-xs" style={{ color: SUB }}>{d.short}</span></div>
-              <div className="text-2xl font-serif">{count}</div>
-              <div className="text-[11px]" style={{ color: SUB }}>session note{count === 1 ? "" : "s"}</div>
-            </Card>
+            <button key={k} onClick={() => onOpenDiscipline(k)} className="text-left">
+              <Card className="!p-3 sm:!p-4 h-full">
+                <div className="flex items-center gap-2 mb-1.5"><span className="w-7 h-7 rounded-lg grid place-items-center" style={{ background: d.color + "18" }}><d.Icon size={15} style={{ color: d.color }} /></span><span className="text-xs" style={{ color: SUB }}>{d.short}</span></div>
+                <div className="text-2xl font-serif">{count}</div>
+                <div className="text-[11px]" style={{ color: SUB }}>session note{count === 1 ? "" : "s"}</div>
+              </Card>
+            </button>
           );
         })}
       </div>
@@ -583,10 +622,8 @@ function Dashboard({ notes, goals, setTab, onSample }) {
 }
 
 /* ---------- notes log ---------- */
-function NotesLog({ notes, goals, onDelete, setTab }) {
-  const [disc, setDisc] = useState("all");
-  const [dom, setDom] = useState("all");
-  const [openImg, setOpenImg] = useState(null);
+function NotesLog({ notes, goals, setTab, filter, onFilter, onOpen }) {
+  const disc = filter.disc, dom = filter.dom;
   const filtered = useMemo(() => notes
     .filter((n) => disc === "all" || n.discipline === disc)
     .filter((n) => dom === "all" || n.domain === dom)
@@ -598,10 +635,10 @@ function NotesLog({ notes, goals, onDelete, setTab }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <select value={disc} onChange={(e) => setDisc(e.target.value)} className="px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>
+        <select value={disc} onChange={(e) => onFilter({ ...filter, disc: e.target.value })} className="px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>
           <option value="all">All therapists</option>{DISC_KEYS.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
-        <select value={dom} onChange={(e) => setDom(e.target.value)} className="px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>
+        <select value={dom} onChange={(e) => onFilter({ ...filter, dom: e.target.value })} className="px-3 py-2 rounded-lg text-sm" style={{ border: `1px solid ${LINE}`, background: CARD, color: INK }}>
           <option value="all">All areas</option>{DOMAINS.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <span className="ml-auto text-sm self-center" style={{ color: SUB }}>{filtered.length} shown</span>
@@ -610,26 +647,22 @@ function NotesLog({ notes, goals, onDelete, setTab }) {
         {filtered.map((n) => {
           const goal = goals.find((g) => g.id === n.goalId);
           return (
-            <Card key={n.id} className="!p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                    <Chip discipline={n.discipline} />
-                    <span className="text-xs" style={{ color: SUB }}>{n.therapist || "—"} · {fmtDate(n.date)}</span>
-                    {n.source === "scan" && <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SUB }}><Camera size={12} /> scanned</span>}
-                  </div>
-                  <div className="text-sm font-medium mb-0.5">{n.domain}{n.skill ? ` — ${n.skill}` : ""}</div>
-                  <p className="text-sm leading-relaxed" style={{ color: "#3C4B50" }}>{n.content}</p>
-                  <div className="mt-2 flex items-center gap-3 flex-wrap">
-                    <LevelPill v={n.progress} />
-                    {goal && <span className="text-[11px] inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={11} /> {goal.name}</span>}
-                    {n.source === "scan" && <button onClick={() => setOpenImg(openImg === n.id ? null : n.id)} className="text-[11px] inline-flex items-center gap-1" style={{ color: SUB }}><ImageIcon size={11} /> {openImg === n.id ? "hide" : "view"} original</button>}
-                  </div>
-                  {openImg === n.id && <NoteImage noteId={n.id} />}
+            <button key={n.id} onClick={() => onOpen(n.id)} className="w-full text-left">
+              <Card className="!p-4">
+                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                  <Chip discipline={n.discipline} />
+                  <span className="text-xs" style={{ color: SUB }}>{n.therapist || "—"} · {fmtDate(n.date)}</span>
+                  {n.source === "scan" && <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SUB }}><Camera size={12} /> scanned</span>}
+                  <ChevronRight size={14} className="ml-auto shrink-0" style={{ color: SUB }} />
                 </div>
-                <button onClick={() => onDelete(n.id)} className="p-1.5 rounded-lg shrink-0" style={{ color: SUB }} aria-label="Delete note"><Trash2 size={16} /></button>
-              </div>
-            </Card>
+                <div className="text-sm font-medium mb-0.5">{n.domain}{n.skill ? ` — ${n.skill}` : ""}</div>
+                <p className="text-sm leading-relaxed" style={{ color: "#3C4B50" }}>{n.content}</p>
+                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                  <LevelPill v={n.progress} />
+                  {goal && <span className="text-[11px] inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={11} /> {goal.name}</span>}
+                </div>
+              </Card>
+            </button>
           );
         })}
       </div>
@@ -766,6 +799,7 @@ function Goals({ goals, notes, onSave }) {
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState(null);
   const [draft, setDraft] = useState({ name: "", domain: DOMAINS[0], target: 5 });
+  useBackClose(!!open, () => setOpen(null));
 
   const create = () => {
     if (!draft.name.trim()) return;
@@ -773,7 +807,7 @@ function Goals({ goals, notes, onSave }) {
     setDraft({ name: "", domain: DOMAINS[0], target: 5 }); setCreating(false);
   };
   const toggleStatus = (g) => onSave(goals.map((x) => x.id === g.id ? { ...x, status: x.status === "achieved" ? "active" : "achieved" } : x));
-  const remove = (id) => { onSave(goals.filter((g) => g.id !== id)); setOpen(null); };
+  const remove = (id) => { if (!window.confirm("Delete this goal? Linked notes are kept.")) return; onSave(goals.filter((g) => g.id !== id)); setOpen(null); };
 
   const detail = open && goals.find((g) => g.id === open);
   if (detail) {
@@ -1141,6 +1175,7 @@ function RecCard({ r, onStatus }) {
 
 function Handout({ profile, notes, school, onClose }) {
   const [copied, setCopied] = useState(false);
+  useBackClose(true, onClose);
   const age = ageFrom(profile.dob);
   const snapshot = useMemo(() => {
     const map = {};
@@ -1291,6 +1326,34 @@ function Login() {
         <p className="text-sm mb-6" style={{ color: SUB }}>A private space to follow your child's therapy progress — notes, goals, milestones, and guidance in one place.</p>
         <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
         <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to you. Signing in lets you use the same data on any device.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- read-only note view ---------- */
+function NoteView({ note, goal, onClose, onDelete }) {
+  useBackClose(true, onClose);
+  return (
+    <div className="fixed inset-0 z-50 overflow-auto" style={{ background: PAPER }}>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={onClose} className="text-sm inline-flex items-center gap-1 font-medium" style={{ color: ACCENT }}>← Back</button>
+          <button onClick={() => { if (window.confirm("Delete this note? This can't be undone.")) { onDelete(note.id); onClose(); } }} className="text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ color: "#C0492E", border: `1px solid ${LINE}`, background: CARD }}><Trash2 size={13} /> Delete</button>
+        </div>
+        <Card>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <Chip discipline={note.discipline} />
+            <span className="text-xs" style={{ color: SUB }}>{note.therapist || "—"} · {fmtDate(note.date)}</span>
+            {note.source === "scan" && <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SUB }}><Camera size={12} /> scanned</span>}
+          </div>
+          <h2 className="font-serif text-xl mb-1.5">{note.domain}{note.skill ? ` — ${note.skill}` : ""}</h2>
+          <div className="mb-3"><LevelPill v={note.progress} /></div>
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: "#3C4B50" }}>{note.content}</p>
+          {goal && <p className="text-xs mt-3 inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={12} /> Linked goal: {goal.name}</p>}
+          {note.source === "scan" && <NoteImage noteId={note.id} />}
+        </Card>
+        <p className="text-[11px] mt-3 px-1" style={{ color: SUB }}>Read-only view. To change a note, delete it and add a corrected one.</p>
       </div>
     </div>
   );
