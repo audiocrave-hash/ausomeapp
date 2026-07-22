@@ -1484,17 +1484,36 @@ function Login({ inviteNotice }) {
     "Invite your co-parent or your child's doctor to the same record",
   ];
   return (
-    <div style={{ background: PAPER, color: INK }} className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm text-center">
-        <img src="/logo.png" alt="Ausome App" className="w-20 h-20 rounded-2xl mx-auto mb-4" style={{ boxShadow: "0 6px 20px rgba(15,118,110,0.25)" }} />
-        <h1 className="font-semibold tracking-tight text-2xl mb-1">Ausome App</h1>
-        <p className="text-sm mb-5" style={{ color: SUB }}>A private space for families to follow a child's therapy and developmental progress, and coordinate with their care team.</p>
-        <ul className="text-left space-y-1.5 mb-6">
-          {features.map((f, i) => <li key={i} className="flex gap-2 text-xs leading-relaxed" style={{ color: "#4A4438" }}><span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
+    <div style={{ background: "#FFFFFF", color: INK }} className="min-h-screen">
+      <div className="max-w-xl mx-auto px-6 pt-16 pb-20 text-center">
+        <div className="flex items-center justify-center gap-2.5 mb-8">
+          <img src="/icon.png" alt="" className="w-11 h-11 rounded-xl" style={{ boxShadow: "0 4px 14px rgba(13,125,87,0.25)" }} />
+          <span className="font-serif text-3xl sm:text-4xl font-medium" style={{ color: ACCENT }}>Ausome App</span>
+        </div>
+
+        <h1 className="font-serif text-4xl sm:text-5xl leading-tight mb-5">
+          Every step of your child's progress, <em style={{ color: ACCENT, fontStyle: "italic" }}>in one calm place</em>
+        </h1>
+        <p className="text-base leading-relaxed max-w-md mx-auto mb-8" style={{ color: SUB }}>
+          A private space for families to follow a child's therapy and developmental progress, and coordinate with their care team.
+        </p>
+
+        {inviteNotice && <p className="text-xs mb-4 px-3 py-2 rounded-lg inline-block" style={{ background: ACCENT + "14", color: ACCENT }}>{inviteNotice}</p>}
+
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
+          <a href="/auth/google" className="px-7 py-3 rounded-full text-white text-sm font-semibold" style={{ background: ACCENT }}>Get started</a>
+          <a href="#how-it-works" className="px-7 py-3 rounded-full text-sm font-semibold" style={{ border: `1.5px solid ${INK}`, color: INK }}>See how it works</a>
+        </div>
+        <p className="text-xs" style={{ color: SUB }}>Sign in with Google — no password to remember.</p>
+      </div>
+
+      <div id="how-it-works" className="max-w-sm mx-auto px-6 pb-16">
+        <p className="text-xs font-semibold tracking-wide uppercase text-center mb-4" style={{ color: SUB }}>How it helps</p>
+        <ul className="text-left space-y-2.5 mb-8">
+          {features.map((f, i) => <li key={i} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: "#4A4438" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
         </ul>
-        {inviteNotice && <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: ACCENT + "14", color: ACCENT }}>{inviteNotice}</p>}
-        <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
-        <p className="text-[11px] mt-4 leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to family members and care-team contacts you invite. <a href="/privacy" style={{ color: ACCENT }}>Privacy policy</a></p>
+        <a href="/auth/google" className="block w-full text-center py-3 rounded-full text-white text-sm font-semibold" style={{ background: ACCENT }}>Continue with Google</a>
+        <p className="text-[11px] mt-4 text-center leading-relaxed" style={{ color: SUB }}>Your records are stored in your own account and shown only to family members and care-team contacts you invite. <a href="/privacy" style={{ color: ACCENT }}>Privacy policy</a></p>
       </div>
     </div>
   );
