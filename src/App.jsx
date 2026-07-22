@@ -1499,12 +1499,6 @@ function Login({ inviteNotice }) {
         </p>
 
         {inviteNotice && <p className="text-xs mb-4 px-3 py-2 rounded-lg inline-block" style={{ background: ACCENT + "14", color: ACCENT }}>{inviteNotice}</p>}
-
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
-          <a href="/auth/google" className="px-7 py-3 rounded-full text-white text-sm font-semibold" style={{ background: ACCENT }}>Get started</a>
-          <a href="#how-it-works" className="px-7 py-3 rounded-full text-sm font-semibold" style={{ border: `1.5px solid ${INK}`, color: INK }}>See how it works</a>
-        </div>
-        <p className="text-xs" style={{ color: SUB }}>Sign in with Google — no password to remember.</p>
       </div>
 
       <div id="how-it-works" className="max-w-sm mx-auto px-6 pb-16">
