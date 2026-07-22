@@ -443,10 +443,6 @@ function Header({ profile, onSave, count, onExport, onImport, user, role, member
   const age = ageFrom(profile.dob);
   return (
     <header style={{ background: CARD, borderBottom: `1px solid ${LINE}` }} className="no-print">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 flex items-center gap-2">
-        <img src="/icon.png" alt="Ausome App" className="w-8 h-8 rounded-lg" />
-        <span className="text-base font-semibold tracking-tight" style={{ color: INK }}>Ausome App</span>
-      </div>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="font-semibold tracking-tight text-xl sm:text-2xl leading-tight truncate">{profile.name ? `${profile.name}'s Progress` : "My Child's Progress"}</h1>
