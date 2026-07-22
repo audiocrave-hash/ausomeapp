@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 
 /* ---------- design tokens ---------- */
-const INK = "#132E32", SUB = "#5C7672", PAPER = "#F7FAF9", CARD = "#FFFFFF",
-  LINE = "#DCE7E3", ACCENT = "#0F766E";
+const INK = "#231F14", SUB = "#6B6558", PAPER = "#FAFAF8", CARD = "#FFFFFF",
+  LINE = "#E7E4DE", ACCENT = "#0D7D57";
 
 const DISCIPLINES = {
   "Speech Therapy": { short: "Speech", color: "#4F46E5", Icon: MessageSquare },
@@ -786,7 +786,7 @@ function NotesLog({ notes, goals, setTab, filter, onFilter, onOpen }) {
                   <ChevronRight size={14} className="ml-auto shrink-0" style={{ color: SUB }} />
                 </div>
                 <div className="text-sm font-medium mb-0.5">{n.domain}{n.skill ? ` — ${n.skill}` : ""}</div>
-                <p className="text-sm leading-relaxed" style={{ color: "#3E5450" }}>{n.content}</p>
+                <p className="text-sm leading-relaxed" style={{ color: "#4A4438" }}>{n.content}</p>
                 <div className="mt-2 flex items-center gap-3 flex-wrap">
                   <LevelPill v={n.progress} />
                   {goal && <span className="text-[11px] inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={11} /> {goal.name}</span>}
@@ -980,7 +980,7 @@ function Goals({ goals, notes, onSave, canEdit }) {
           <p className="text-xs font-medium mb-2 px-1" style={{ color: SUB }}>Linked notes ({linked.length})</p>
           <div className="space-y-2">
             {linked.slice().reverse().map((n) => (
-              <Card key={n.id} className="!p-3"><div className="flex justify-between items-center mb-1"><Chip discipline={n.discipline} /><span className="text-xs" style={{ color: SUB }}>{fmtDate(n.date)}</span></div><p className="text-sm" style={{ color: "#3E5450" }}>{n.content}</p><div className="mt-1.5"><LevelPill v={n.progress} /></div></Card>
+              <Card key={n.id} className="!p-3"><div className="flex justify-between items-center mb-1"><Chip discipline={n.discipline} /><span className="text-xs" style={{ color: SUB }}>{fmtDate(n.date)}</span></div><p className="text-sm" style={{ color: "#4A4438" }}>{n.content}</p><div className="mt-1.5"><LevelPill v={n.progress} /></div></Card>
             ))}
             {linked.length === 0 && <p className="text-sm px-1" style={{ color: SUB }}>Link notes to this goal when adding them.</p>}
           </div>
@@ -1056,7 +1056,7 @@ function Milestones({ profile, status, onSave, canEdit }) {
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Baby size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
@@ -1113,7 +1113,7 @@ function MsChecklist({ band, status, onSave, sel, canEdit }) {
                 const key = ck + i, val = cur[key];
                 return (
                   <div key={key} className="flex items-start gap-3">
-                    <p className="text-sm flex-1 leading-relaxed" style={{ color: "#3E5450" }}>{t}</p>
+                    <p className="text-sm flex-1 leading-relaxed" style={{ color: "#4A4438" }}>{t}</p>
                     <div className="flex gap-1 shrink-0">
                       <button disabled={!canEdit} onClick={() => setItem(key, "yes")} className="w-8 h-8 rounded-lg grid place-items-center disabled:opacity-70" style={{ background: val === "yes" ? "#6FB05A" : CARD, color: val === "yes" ? "#fff" : "#6FB05A", border: `1px solid ${val === "yes" ? "#6FB05A" : LINE}` }} title="Reached" aria-label="Reached"><Check size={15} /></button>
                       <button disabled={!canEdit} onClick={() => setItem(key, "notyet")} className="px-2 h-8 rounded-lg text-[11px] font-medium disabled:opacity-70" style={{ background: val === "notyet" ? "#E8843C" : CARD, color: val === "notyet" ? "#fff" : "#C0785A", border: `1px solid ${val === "notyet" ? "#E8843C" : LINE}` }}>Not yet</button>
@@ -1139,7 +1139,7 @@ function MsGuide({ band }) {
         <Card key={sk}>
           <h3 className="font-semibold tracking-tight text-base mb-3">{sname}</h3>
           <ul className="space-y-2">
-            {(g[sk] || []).map((t, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />{t}</li>)}
+            {(g[sk] || []).map((t, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#4A4438" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />{t}</li>)}
           </ul>
         </Card>
       ))}
@@ -1185,7 +1185,7 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
   if (notes.length === 0) return <Empty title="Add a few notes first" body="Once there are notes to read, this writes a plain-language summary across your whole care team." />;
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Sparkles size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
@@ -1199,7 +1199,7 @@ Return ONLY valid JSON: {"overallSummary":"2-4 warm sentences","domainHighlights
       {saved && <>
         <Card><p className="text-[15px] leading-relaxed">{saved.overallSummary}</p><p className="text-[11px] mt-3" style={{ color: SUB }}>Generated {new Date(saved.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · from {saved.noteCount} notes</p></Card>
         {Array.isArray(saved.domainHighlights) && saved.domainHighlights.length > 0 && (
-          <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><ClipboardList size={16} style={{ color: ACCENT }} /> By area</h3><div className="space-y-2.5">{saved.domainHighlights.map((d, i) => <div key={i} className="flex gap-3"><TrendDot trend={d.trend} /><div><div className="text-sm font-medium">{d.domain} <span className="text-xs font-normal" style={{ color: SUB }}>· {d.trend}</span></div><div className="text-sm" style={{ color: "#3E5450" }}>{d.note}</div></div></div>)}</div></Card>
+          <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><ClipboardList size={16} style={{ color: ACCENT }} /> By area</h3><div className="space-y-2.5">{saved.domainHighlights.map((d, i) => <div key={i} className="flex gap-3"><TrendDot trend={d.trend} /><div><div className="text-sm font-medium">{d.domain} <span className="text-xs font-normal" style={{ color: SUB }}>· {d.trend}</span></div><div className="text-sm" style={{ color: "#4A4438" }}>{d.note}</div></div></div>)}</div></Card>
         )}
         <div className="grid sm:grid-cols-2 gap-4"><ListCard title="Recent wins" Icon={Award} color="#6FB05A" items={saved.wins} /><ListCard title="Keep working on" Icon={Target} color="#E8843C" items={saved.focusAreas} /></div>
         <ListCard title="Questions for your next team meeting" Icon={HelpCircle} color={ACCENT} items={saved.questionsForTeam} />
@@ -1223,7 +1223,7 @@ function TrendDot({ trend }) {
 }
 function ListCard({ title, Icon, color, items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
-  return <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><Icon size={16} style={{ color }} /> {title}</h3><ul className="space-y-2">{items.map((it, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} /><span>{it}</span></li>)}</ul></Card>;
+  return <Card><h3 className="font-semibold tracking-tight text-base mb-3 flex items-center gap-2"><Icon size={16} style={{ color }} /> {title}</h3><ul className="space-y-2">{items.map((it, i) => <li key={i} className="flex gap-2 text-sm leading-relaxed" style={{ color: "#4A4438" }}><span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} /><span>{it}</span></li>)}</ul></Card>;
 }
 
 /* ---------- activities / recommendations ---------- */
@@ -1268,7 +1268,7 @@ Return ONLY valid JSON: {"home":[{"title":"short name","activity":"2-3 sentence 
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Target size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
@@ -1310,7 +1310,7 @@ function RecCard({ r, onStatus, canEdit }) {
         <h4 className="font-medium text-[15px]">{r.title}</h4>
         <span className="text-[11px] px-2 py-0.5 rounded-full shrink-0" style={{ background: st.color + "18", color: st.color }}>{st.label}</span>
       </div>
-      <p className="text-sm leading-relaxed mb-2" style={{ color: "#3E5450" }}>{r.activity}</p>
+      <p className="text-sm leading-relaxed mb-2" style={{ color: "#4A4438" }}>{r.activity}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] mb-3" style={{ color: SUB }}>
         {r.targetSkill && <span className="inline-flex items-center gap-1"><Target size={11} /> {r.targetSkill}</span>}
         {r.why && <span className="italic">{r.why}</span>}
@@ -1373,7 +1373,7 @@ function Handout({ profile, notes, school, onClose }) {
             {school.map((r, i) => (
               <li key={r.id} className="text-sm">
                 <span className="font-medium">{i + 1}. {r.title}</span>
-                <p className="mt-0.5" style={{ color: "#3E5450" }}>{r.activity}</p>
+                <p className="mt-0.5" style={{ color: "#4A4438" }}>{r.activity}</p>
                 {r.targetSkill && <p className="text-xs mt-0.5" style={{ color: SUB }}>Targets: {r.targetSkill}</p>}
               </li>
             ))}
@@ -1433,7 +1433,7 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
 
   return (
     <div className="space-y-4">
-      <Card style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+      <Card style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
         <div className="flex items-start gap-3">
           <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={{ background: ACCENT + "1A" }}><Bot size={20} style={{ color: ACCENT }} /></span>
           <div className="flex-1">
@@ -1453,7 +1453,7 @@ Reply to the parent's last message. Plain text only, no markdown headers.`;
       <div className="space-y-3">
         {chat.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={m.role === "user" ? { background: ACCENT, color: "#fff" } : { background: CARD, border: `1px solid ${LINE}`, color: "#3E5450" }}>{m.text}</div>
+            <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={m.role === "user" ? { background: ACCENT, color: "#fff" } : { background: CARD, border: `1px solid ${LINE}`, color: "#4A4438" }}>{m.text}</div>
           </div>
         ))}
         {busy && <div className="flex justify-start"><div className="rounded-2xl px-4 py-2.5" style={{ background: CARD, border: `1px solid ${LINE}` }}><Loader2 size={16} className="animate-spin" style={{ color: ACCENT }} /></div></div>}
@@ -1490,7 +1490,7 @@ function Login({ inviteNotice }) {
         <h1 className="font-semibold tracking-tight text-2xl mb-1">Ausome App</h1>
         <p className="text-sm mb-5" style={{ color: SUB }}>A private space for families to follow a child's therapy and developmental progress, and coordinate with their care team.</p>
         <ul className="text-left space-y-1.5 mb-6">
-          {features.map((f, i) => <li key={i} className="flex gap-2 text-xs leading-relaxed" style={{ color: "#3E5450" }}><span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
+          {features.map((f, i) => <li key={i} className="flex gap-2 text-xs leading-relaxed" style={{ color: "#4A4438" }}><span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: ACCENT }} />{f}</li>)}
         </ul>
         {inviteNotice && <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: ACCENT + "14", color: ACCENT }}>{inviteNotice}</p>}
         <a href="/auth/google" className="block w-full py-3 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Continue with Google</a>
@@ -1554,19 +1554,19 @@ ${history}`;
           </div>
           <h2 className="font-semibold tracking-tight text-xl mb-1.5">{note.domain}{note.skill ? ` — ${note.skill}` : ""}</h2>
           <div className="mb-3"><LevelPill v={note.progress} /></div>
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{note.content}</p>
+          <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: "#4A4438" }}>{note.content}</p>
           {goal && <p className="text-xs mt-3 inline-flex items-center gap-1" style={{ color: ACCENT }}><Flag size={12} /> Linked goal: {goal.name}</p>}
           {note.source === "scan" && <NoteImage noteId={note.id} />}
         </Card>
         {(canEdit || note.insight) && (
-        <Card className="mt-4" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+        <Card className="mt-4" style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h3 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={16} style={{ color: ACCENT }} /> AI insight</h3>
             {canEdit && <button onClick={runInsight} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {note.insight ? "Regenerate" : "Assess this note"}</button>}
           </div>
           {err && <p className="text-xs mb-1" style={{ color: "#C0492E" }}>{err}</p>}
           {note.insight
-            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{note.insight.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(note.insight.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · an aid to understanding, not a clinical judgment</p></>
+            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#4A4438" }}>{note.insight.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(note.insight.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · an aid to understanding, not a clinical judgment</p></>
             : <p className="text-xs" style={{ color: SUB }}>Explains this note in plain language, reads it against earlier notes in the same area, and suggests questions for the provider.</p>}
         </Card>
         )}
@@ -1607,7 +1607,7 @@ Return ONLY valid JSON: {"summary":"2-3 plain sentences on how the week went","w
       {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
       {data && (
         <div className="mt-1">
-          <p className="text-sm leading-relaxed" style={{ color: "#3E5450" }}>{data.summary}</p>
+          <p className="text-sm leading-relaxed" style={{ color: "#4A4438" }}>{data.summary}</p>
           {Array.isArray(data.wins) && data.wins.length > 0 && <p className="text-xs mt-2" style={{ color: "#3B6D11" }}>Wins: {data.wins.join(" · ")}</p>}
           {Array.isArray(data.focus) && data.focus.length > 0 && <p className="text-xs mt-1" style={{ color: "#854F0B" }}>Watch: {data.focus.join(" · ")}</p>}
         </div>
@@ -1721,7 +1721,7 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
                     <div className="min-w-0">
                       <span className="text-xs" style={{ color: SUB }}>{fmtDate(e.date)}</span>
                       <div className="flex flex-wrap gap-1.5 mt-0.5">{e.scores.map((sc, i) => <span key={i} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: ACCENT + "14", color: ACCENT }}>{sc.label}: {sc.value}</span>)}</div>
-                      {e.notes && <p className="text-xs mt-1" style={{ color: "#3E5450" }}>{e.notes}</p>}
+                      {e.notes && <p className="text-xs mt-1" style={{ color: "#4A4438" }}>{e.notes}</p>}
                     </div>
                     {canEdit && <button onClick={() => remove(e.id)} className="p-1 shrink-0" style={{ color: SUB }} aria-label="Delete result"><Trash2 size={13} /></button>}
                   </div>
@@ -1733,14 +1733,14 @@ In plain language: (1) briefly say what each tool measures; (2) describe the tre
       </div>
 
       {evals.length > 0 && (
-        <Card className="mt-3" style={{ background: "linear-gradient(180deg,#EEF6F3,#FFFFFF)" }}>
+        <Card className="mt-3" style={{ background: "linear-gradient(180deg,#EAF7F0,#FFFFFF)" }}>
           <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <h4 className="font-semibold tracking-tight text-base flex items-center gap-2"><Sparkles size={15} style={{ color: ACCENT }} /> AI reading of the scores</h4>
             {canEdit && <button onClick={genSummary} disabled={busy} className="text-xs px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1.5 disabled:opacity-60" style={{ color: ACCENT, border: `1px solid ${LINE}`, background: CARD }}>{busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {summary ? "Regenerate" : "Explain my results"}</button>}
           </div>
           {err && <p className="text-xs" style={{ color: "#C0492E" }}>{err}</p>}
           {summary
-            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#3E5450" }}>{summary.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(summary.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · numbers without the clinician's report lack context — bring the questions to your team</p></>
+            ? <><p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#4A4438" }}>{summary.text}</p><p className="text-[10px] mt-2" style={{ color: SUB }}>Generated {new Date(summary.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · numbers without the clinician's report lack context — bring the questions to your team</p></>
             : <p className="text-xs" style={{ color: SUB }}>Explains what each tool measures, the trend across repeat administrations, and questions for the professional who scored them.</p>}
         </Card>
       )}
