@@ -361,8 +361,10 @@ export default function App() {
   const deleteNote = (id) => { store.del(imgKey(id)); saveNotes(notes.filter((x) => x.id !== id)); };
 
   const exportAll = async () => {
+    const scanNotes = notes.filter((n) => n.source === "scan");
+    const fetched = await Promise.all(scanNotes.map((n) => store.get(imgKey(n.id), null)));
     const images = {};
-    for (const n of notes) if (n.source === "scan") { const img = await store.get(imgKey(n.id), null); if (img) images[n.id] = img; }
+    scanNotes.forEach((n, i) => { if (fetched[i]) images[n.id] = fetched[i]; });
     const payload = { app: "dev-tracker", version: 1, exportedAt: new Date().toISOString(), data: { notes, goals, recs, profile, assessment, milestones, chat, weekly, evals, evalSummary }, images };
     const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const a = document.createElement("a");
@@ -433,25 +435,26 @@ export default function App() {
 function Header({ profile, onSave, count, onExport, onImport, user, role, members, onRefreshMembers }) {
   const [open, setOpen] = useState(false);
   const [careOpen, setCareOpen] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const [draft, setDraft] = useState(profile);
   const fileRef = useRef();
   const [msg, setMsg] = useState("");
   useEffect(() => setDraft(profile), [profile]);
-  const initial = (profile.name || "?").trim().charAt(0).toUpperCase() || "?";
   const age = ageFrom(profile.dob);
   return (
     <header style={{ background: CARD, borderBottom: `1px solid ${LINE}` }} className="no-print">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 flex items-center gap-1.5">
-        <img src="/icon.png" alt="" className="w-5 h-5 rounded-md" />
-        <span className="text-xs font-semibold tracking-tight" style={{ color: SUB }}>Ausome App</span>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 flex items-center gap-2">
+        <img src="/icon.png" alt="Ausome App" className="w-8 h-8 rounded-lg" />
+        <span className="text-base font-semibold tracking-tight" style={{ color: INK }}>Ausome App</span>
       </div>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl grid place-items-center text-white text-lg font-semibold shrink-0" style={{ background: ACCENT }}>{initial}</div>
         <div className="min-w-0 flex-1">
           <h1 className="font-semibold tracking-tight text-xl sm:text-2xl leading-tight truncate">{profile.name ? `${profile.name}'s Progress` : "My Child's Progress"}</h1>
           <p className="text-xs sm:text-sm" style={{ color: SUB }}>{age ? `${age} · ` : ""}{count} note{count === 1 ? "" : "s"} across the care team</p>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-sm px-3 py-1.5 rounded-lg tabbtn" style={{ color: ACCENT, border: `1px solid ${LINE}` }}>{role === "viewer" ? "Care team" : profile.name ? "Edit" : "Set up"}</button>
+        <button onClick={() => setOpen((o) => !o)} className="w-9 h-9 rounded-lg grid place-items-center shrink-0 tabbtn" style={{ color: ACCENT, border: `1px solid ${LINE}` }} aria-label={role === "viewer" ? "Care team" : "Edit"} title={role === "viewer" ? "Care team" : profile.name ? "Edit" : "Set up"}>
+          {role === "viewer" ? <Users size={16} /> : <Pencil size={16} />}
+        </button>
       </div>
       {open && (
         <div style={{ borderTop: `1px solid ${LINE}`, background: PAPER }}>
@@ -471,9 +474,9 @@ function Header({ profile, onSave, count, onExport, onImport, user, role, member
           </div>
           <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-4">
             <div className={`grid ${role === "owner" ? "grid-cols-3" : "grid-cols-2"} gap-2`}>
-              <button onClick={onExport} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl" style={{ border: `1px solid ${LINE}`, background: CARD }}>
-                <Download size={20} style={{ color: ACCENT }} />
-                <span className="text-xs font-medium">Backup</span>
+              <button onClick={async () => { setBackingUp(true); try { await onExport(); } finally { setBackingUp(false); } }} disabled={backingUp} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl disabled:opacity-60" style={{ border: `1px solid ${LINE}`, background: CARD }}>
+                {backingUp ? <Loader2 size={20} className="animate-spin" style={{ color: ACCENT }} /> : <Download size={20} style={{ color: ACCENT }} />}
+                <span className="text-xs font-medium">{backingUp ? "Preparing…" : "Backup"}</span>
               </button>
               {role === "owner" && (
                 <button onClick={() => fileRef.current?.click()} className="flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl" style={{ border: `1px solid ${LINE}`, background: CARD }}>
@@ -1618,7 +1621,7 @@ Return ONLY valid JSON: {"summary":"2-3 plain sentences on how the week went","w
 }
 
 /* ---------- formal assessment scores ---------- */
-const EVAL_TOOLS = ["VB-MAPP", "ABLLS-R", "Vineland-3", "CARS-2", "PEP-3", "Other"];
+const EVAL_TOOLS = ["ASQ-3", "VB-MAPP", "ABLLS-R", "Vineland-3", "CARS-2", "PEP-3", "Other"];
 function FormalScores({ evals, onSave, summary, onSaveSummary, profile, canEdit }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
