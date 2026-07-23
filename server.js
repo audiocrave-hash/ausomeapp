@@ -21,6 +21,35 @@ const pool = new pg.Pool({
     ? { rejectUnauthorized: false } : false,
 });
 
+/* ---------- application-level encryption for stored data ---------- */
+// ENCRYPTION_KEY must be a 64-character hex string (32 bytes) — generate it
+// yourself and paste it directly into Railway's Variables; never share it
+// in chat or commit it to the repo. Values already in the DB before this was
+// enabled are plain text and are auto-encrypted the moment they're next read
+// or written; see the boot-time sweep in init() for a one-time pass over the rest.
+const rawKey = process.env.ENCRYPTION_KEY || "";
+const ENC_KEY = /^[0-9a-f]{64}$/i.test(rawKey) ? Buffer.from(rawKey, "hex") : null;
+if (rawKey && !ENC_KEY) console.error("ENCRYPTION_KEY is set but isn't a valid 64-character hex string — encryption is DISABLED until this is fixed.");
+if (!rawKey) console.warn("ENCRYPTION_KEY not set — data will be stored in plain text. See README.");
+
+function encryptValue(plaintext) {
+  if (!ENC_KEY) throw new Error("encryption not configured");
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", ENC_KEY, iv);
+  const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return "enc1:" + Buffer.concat([iv, tag, enc]).toString("base64");
+}
+function decryptValue(stored) {
+  if (typeof stored !== "string" || !stored.startsWith("enc1:")) return stored; // legacy plaintext, pass through as-is
+  if (!ENC_KEY) throw new Error("encryption not configured — cannot read encrypted data without ENCRYPTION_KEY");
+  const raw = Buffer.from(stored.slice(5), "base64");
+  const iv = raw.subarray(0, 12), tag = raw.subarray(12, 28), enc = raw.subarray(28);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", ENC_KEY, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+}
+
 async function init() {
   // Original tables — left exactly as-is. kv is never written to going forward;
   // it survives untouched as an automatic backup of pre-sharing data.
@@ -59,6 +88,15 @@ async function init() {
     updated_at TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY(family_id, key))`);
   console.log("DB ready");
+
+  if (ENC_KEY) {
+    const plain = await pool.query("SELECT family_id, key, value FROM family_kv WHERE value NOT LIKE 'enc1:%'");
+    for (const row of plain.rows) {
+      await pool.query("UPDATE family_kv SET value = $1 WHERE family_id = $2 AND key = $3",
+        [encryptValue(row.value), row.family_id, row.key]);
+    }
+    if (plain.rows.length) console.log(`Encrypted ${plain.rows.length} pre-existing row(s) on boot.`);
+  }
 }
 init().catch((e) => console.error("DB init failed — is Postgres attached and DATABASE_URL set?", e.message));
 
@@ -70,7 +108,7 @@ const secure = process.env.NODE_ENV !== "development";
 const setCookie = (res, name, val, maxAgeSec) =>
   res.append("Set-Cookie", `${name}=${encodeURIComponent(val)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? "; Secure" : ""}`);
 const appUrl = (req) => process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
-const APP_NAME = process.env.APP_NAME || "Development Tracker";
+const APP_NAME = process.env.APP_NAME || "Ausome App";
 const CONTACT = process.env.CONTACT_EMAIL || "(add a support email via CONTACT_EMAIL)";
 
 async function requireAuth(req, res, next) {
@@ -171,9 +209,10 @@ app.post("/api/family/ensure", requireAuth, loadFamily, async (req, res) => {
     // migrate legacy per-user data, if any, into the new shared store
     const legacy = await client.query("SELECT key, value FROM kv WHERE user_id = $1", [req.user.id]);
     for (const row of legacy.rows) {
+      const stored = ENC_KEY ? encryptValue(row.value) : row.value;
       await client.query(
         "INSERT INTO family_kv(family_id, key, value) VALUES($1,$2,$3) ON CONFLICT (family_id, key) DO NOTHING",
-        [familyId, row.key, row.value]);
+        [familyId, row.key, stored]);
     }
     await client.query("COMMIT");
     res.json({ family: { id: familyId, role: "owner" } });
@@ -226,15 +265,20 @@ app.get("/api/family/members", requireAuth, loadFamily, requireFamily, async (re
 /* ---------- shared per-family data (key-value) ---------- */
 app.get("/api/kv/:key", requireAuth, loadFamily, requireFamily, async (req, res) => {
   const r = await pool.query("SELECT value FROM family_kv WHERE family_id = $1 AND key = $2", [req.family.id, req.params.key]);
-  res.json({ value: r.rows.length ? r.rows[0].value : null });
+  if (!r.rows.length) return res.json({ value: null });
+  try { res.json({ value: decryptValue(r.rows[0].value) }); }
+  catch (e) { console.error("decrypt failed for", req.params.key, e.message); res.status(500).json({ error: "Server misconfigured: cannot read encrypted data (check ENCRYPTION_KEY)." }); }
 });
 app.put("/api/kv/:key", requireAuth, loadFamily, requireFamily, requireOwner, async (req, res) => {
   const { value } = req.body || {};
   if (typeof value !== "string") return res.status(400).json({ error: "value must be a string" });
+  let stored;
+  try { stored = ENC_KEY ? encryptValue(value) : value; }
+  catch (e) { return res.status(500).json({ error: "Server misconfigured: ENCRYPTION_KEY not set." }); }
   await pool.query(
     `INSERT INTO family_kv(family_id, key, value, updated_at) VALUES($1,$2,$3, now())
      ON CONFLICT (family_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [req.family.id, req.params.key, value]);
+    [req.family.id, req.params.key, stored]);
   res.json({ ok: true });
 });
 app.delete("/api/kv/:key", requireAuth, loadFamily, requireFamily, requireOwner, async (req, res) => {
@@ -320,4 +364,4 @@ app.use(express.static(dist));
 app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Development Tracker running on :${port}`));
+app.listen(port, () => console.log(`Ausome App running on :${port}`));

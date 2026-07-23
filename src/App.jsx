@@ -353,9 +353,9 @@ export default function App() {
   const saveEvals = (e) => { setEvals(e); store.set("ndt:evals", e); };
   const saveEvalSummary = (v) => { setEvalSummary(v); store.set("ndt:evalsummary", v); };
 
-  const addNote = async (n, imageDataUrl) => {
+  const addNote = async (n, images) => {
     const id = uid();
-    if (imageDataUrl) await store.set(imgKey(id), imageDataUrl);
+    if (Array.isArray(images) && images.length) await store.set(imgKey(id), JSON.stringify(images));
     saveNotes([{ ...n, id }, ...notes]);
   };
   const deleteNote = (id) => { store.del(imgKey(id)); saveNotes(notes.filter((x) => x.id !== id)); };
@@ -607,10 +607,29 @@ function Empty({ title, body, children }) {
   );
 }
 function NoteImage({ noteId }) {
-  const [src, setSrc] = useState(null);
-  useEffect(() => { let on = true; store.get(imgKey(noteId), null).then((v) => on && setSrc(v)); return () => { on = false; }; }, [noteId]);
-  if (!src) return null;
-  return <img src={src} alt="Scanned note" className="mt-3 rounded-xl max-h-64 w-auto" style={{ border: `1px solid ${LINE}` }} />;
+  const [imgs, setImgs] = useState(null);
+  useEffect(() => {
+    let on = true;
+    store.get(imgKey(noteId), null).then((v) => {
+      if (!on || !v) return;
+      let list;
+      try { const parsed = JSON.parse(v); list = Array.isArray(parsed) ? parsed : [v]; }
+      catch { list = [v]; } // legacy: a single raw dataURL string, not JSON
+      setImgs(list);
+    });
+    return () => { on = false; };
+  }, [noteId]);
+  if (!imgs || !imgs.length) return null;
+  return (
+    <div className="mt-3 flex gap-2 overflow-x-auto">
+      {imgs.map((src, i) => (
+        <div key={i} className="shrink-0">
+          <img src={src} alt={`Scanned note, page ${i + 1}`} className="rounded-xl max-h-64 w-auto" style={{ border: `1px solid ${LINE}` }} />
+          {imgs.length > 1 && <p className="text-[10px] text-center mt-1" style={{ color: SUB }}>Page {i + 1} of {imgs.length}</p>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* ---------- goal helpers ---------- */
@@ -801,7 +820,7 @@ function NotesLog({ notes, goals, setTab, filter, onFilter, onOpen }) {
 }
 
 /* ---------- add note (type or scan) ---------- */
-const OCR_PROMPT = `You are reading a photo or scan of a therapy or classroom progress note for a young child. Transcribe and structure it. Do not invent content that is not visible. If something is unreadable or uncertain, still give your best guess but list that field name in "uncertain".
+const OCR_PROMPT = `You are reading photo(s) of a therapy or classroom progress note for a young child. You may receive more than one image — if so, they are consecutive pages of the SAME note (in order), not separate notes; read them together as one continuous document and return a single combined result. Transcribe and structure it. Do not invent content that is not visible. If something is unreadable or uncertain, still give your best guess but list that field name in "uncertain".
 
 Return ONLY valid JSON (no markdown), shape:
 {"date":"YYYY-MM-DD or empty","provider":"person's name if written, else empty","discipline":"one of: ${DISC_KEYS.join(" | ")} | empty","domain":"closest of: ${DOMAINS.join(" | ")}","skill":"specific goal/skill if mentioned, else empty","summary":"a clean, readable transcription/summary of the note in plain sentences","progress":"integer 1-5 estimating progress (1 emerging .. 5 mastered) or null","uncertain":["field names you were unsure about"]}`;
@@ -818,7 +837,7 @@ function AddNote({ goals, onAdd }) {
       </div>
       {mode === "type"
         ? <NoteForm goals={goals} onSubmit={(n) => onAdd({ ...n, source: "typed" })} />
-        : <ScanIntake goals={goals} onSubmit={(n, img) => onAdd({ ...n, source: "scan" }, img)} />}
+        : <ScanIntake goals={goals} onSubmit={(n, imgs) => onAdd({ ...n, source: "scan" }, imgs)} />}
     </div>
   );
 }
@@ -858,30 +877,48 @@ function NoteForm({ goals, initial, onSubmit }) {
   );
 }
 
+const MAX_PAGES = 5;
 function ScanIntake({ goals, onSubmit }) {
   const [phase, setPhase] = useState("pick"); // pick | reading | review | error
-  const [img, setImg] = useState(null);       // stored dataURL (image) or null (pdf)
+  const [imgs, setImgs] = useState([]);       // stored dataURLs (images) or [] (pdf)
   const [extracted, setExtracted] = useState(null);
   const [uncertain, setUncertain] = useState([]);
   const [err, setErr] = useState("");
+  const [trimmedNotice, setTrimmedNotice] = useState("");
   const inputRef = useRef();
 
-  const handleFile = async (file) => {
-    if (!file) return;
-    setErr(""); setPhase("reading");
+  const handleFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setErr(""); setTrimmedNotice("");
+
+    const pdfCount = files.filter((f) => f.type === "application/pdf").length;
+    if (pdfCount > 0 && files.length > 1) {
+      setErr("PDF scans work one file at a time. Select just the PDF, or switch to photos to combine multiple pages.");
+      return;
+    }
+
+    setPhase("reading");
     try {
-      const isPdf = file.type === "application/pdf";
-      let content, storeImg = null;
-      if (isPdf) {
-        const b64 = strip(await fileToDataUrl(file));
+      let content, storeImgs = [];
+      if (pdfCount === 1) {
+        const b64 = strip(await fileToDataUrl(files[0]));
         content = [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }, { type: "text", text: OCR_PROMPT }];
       } else {
-        const jpeg = await fileToJpeg(file);
-        storeImg = jpeg;
-        content = [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: strip(jpeg) } }, { type: "text", text: OCR_PROMPT }];
+        let usable = files;
+        if (usable.length > MAX_PAGES) {
+          setTrimmedNotice(`Only the first ${MAX_PAGES} pages were used (${usable.length} selected).`);
+          usable = usable.slice(0, MAX_PAGES);
+        }
+        const jpegs = await Promise.all(usable.map((f) => fileToJpeg(f)));
+        storeImgs = jpegs;
+        content = [
+          ...jpegs.map((jpeg) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: strip(jpeg) } })),
+          { type: "text", text: OCR_PROMPT },
+        ];
       }
-      const r = await claudeJSON(content, 1500);
-      setImg(storeImg);
+      const r = await claudeJSON(content, 1800);
+      setImgs(storeImgs);
       setUncertain(Array.isArray(r.uncertain) ? r.uncertain : []);
       setExtracted({
         date: r.date || todayStr(),
@@ -894,7 +931,7 @@ function ScanIntake({ goals, onSubmit }) {
         goalId: "",
       });
       setPhase("review");
-    } catch { setErr("Couldn't read that file. Try a clearer photo, or type the note instead."); setPhase("error"); }
+    } catch { setErr("Couldn't read that file. Try clearer photos, or type the note instead."); setPhase("error"); }
   };
 
   if (phase === "reading")
@@ -903,12 +940,23 @@ function ScanIntake({ goals, onSubmit }) {
   if (phase === "review" && extracted)
     return (
       <div className="space-y-4">
-        {img && <Card className="!p-3"><img src={img} alt="Scan" className="rounded-xl w-full max-h-72 object-contain" /></Card>}
+        {imgs.length > 0 && (
+          <Card className="!p-3">
+            <div className="flex gap-2 overflow-x-auto">
+              {imgs.map((im, i) => (
+                <div key={i} className="shrink-0">
+                  <img src={im} alt={`Page ${i + 1}`} className="rounded-xl max-h-56 w-auto object-contain" />
+                  {imgs.length > 1 && <p className="text-[10px] text-center mt-1" style={{ color: SUB }}>Page {i + 1} of {imgs.length}</p>}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
         <div className="flex items-start gap-2 text-sm px-1" style={{ color: SUB }}>
           <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: "#E0A34E" }} />
           <span>Check everything before saving{uncertain.length ? `, especially: ${uncertain.join(", ")}` : ""}. Handwriting reading isn't perfect.</span>
         </div>
-        <NoteForm goals={goals} initial={extracted} onSubmit={(n) => onSubmit(n, img)} />
+        <NoteForm goals={goals} initial={extracted} onSubmit={(n) => onSubmit(n, imgs)} />
       </div>
     );
 
@@ -916,10 +964,12 @@ function ScanIntake({ goals, onSubmit }) {
     <Card className="text-center py-10">
       <div className="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-4" style={{ background: ACCENT + "14" }}><Camera size={26} style={{ color: ACCENT }} /></div>
       <h3 className="font-semibold tracking-tight text-lg mb-1">Scan the teacher's note</h3>
-      <p className="text-sm max-w-xs mx-auto mb-5" style={{ color: SUB }}>Take a photo or upload a scan. It reads the note and fills in the fields for you to confirm.</p>
+      <p className="text-sm max-w-xs mx-auto mb-2" style={{ color: SUB }}>Take a photo or upload a scan. It reads the note and fills in the fields for you to confirm.</p>
+      <p className="text-xs max-w-xs mx-auto mb-5" style={{ color: SUB }}>Multiple pages of the same note? Select up to {MAX_PAGES} photos at once — they'll be combined into one entry.</p>
       {err && <p className="text-sm mb-4" style={{ color: "#C0492E" }}>{err}</p>}
-      <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
-      <button onClick={() => inputRef.current?.click()} className="px-5 py-2.5 rounded-lg text-white text-sm font-medium" style={{ background: ACCENT }}>Choose photo or file</button>
+      {trimmedNotice && <p className="text-xs mb-4" style={{ color: "#C0785A" }}>{trimmedNotice}</p>}
+      <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+      <button onClick={() => inputRef.current?.click()} className="px-5 py-2.5 rounded-lg text-white text-sm font-medium" style={{ background: ACCENT }}>Choose photo(s) or file</button>
     </Card>
   );
 }

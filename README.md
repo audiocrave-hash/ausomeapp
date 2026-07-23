@@ -1,4 +1,4 @@
-# Development Tracker — v2.3 (shared family records)
+# Ausome App — v2.3 (shared family records)
 
 Google sign-in · shared child records with co-owner/viewer roles · public sign-up.
 
@@ -44,7 +44,22 @@ Postgres service.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `ANTHROPIC_API_KEY`
 - `CONTACT_EMAIL` — a real support address; shown on the privacy page
-- `APP_NAME` — optional, defaults to "Development Tracker"
+- `APP_NAME` — optional, defaults to "Ausome App"
+- `ENCRYPTION_KEY` — **generate this yourself, never share it with anyone
+  (including in chat).** Run one of these on your own machine, then paste
+  the output straight into Railway's Variables:
+  ```
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  # or:
+  openssl rand -hex 32
+  ```
+  Without this variable, the app still works, but stores notes and scans as
+  plain text in the database. With it, everything is encrypted before it's
+  written and decrypted only when your app reads it back — a stolen or
+  leaked database credential alone isn't enough to read the data. **If this
+  key is ever lost, all encrypted data becomes permanently unreadable** —
+  keep a copy somewhere safe outside Railway (a password manager, not just
+  this one env var).
 
 Redeploy. Open the app → "Continue with Google".
 
